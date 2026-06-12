@@ -1,0 +1,51 @@
+════════════════════════════════════════════════════════
+  Audio Downloader — Cómo generar el .exe
+════════════════════════════════════════════════════════
+
+ESTRUCTURA DE CARPETAS NECESARIA
+─────────────────────────────────
+  tu_carpeta\
+  ├── yt_mp3_downloader.py   ← el código
+  ├── build_exe.bat          ← el script de build
+  └── ffmpeg\
+      ├── ffmpeg.exe         ← descargar (ver paso 1)
+      └── ffprobe.exe        ← descargar (ver paso 1)
+
+
+PASO 1 — Descargar FFmpeg
+─────────────────────────
+1. Ve a: https://www.gyan.dev/ffmpeg/builds/
+2. Descarga "ffmpeg-release-essentials.zip"
+3. Descomprime el zip
+4. Dentro verás una carpeta con subcarpeta "bin\"
+5. Crea una carpeta "ffmpeg\" junto al .bat
+6. Copia ffmpeg.exe y ffprobe.exe desde "bin\" a tu carpeta "ffmpeg\"
+
+
+PASO 2 — Ejecutar el build
+──────────────────────────
+1. Abre una ventana CMD o PowerShell en tu carpeta
+2. Ejecuta:  build_exe.bat
+3. Espera ~2-5 minutos (la primera vez descarga dependencias)
+4. El .exe aparecerá en:  dist\AudioDownloader.exe
+
+
+RESULTADO
+─────────
+- Un único archivo AudioDownloader.exe (~100-120 MB)
+- Tus amigos solo tienen que hacer doble click
+- No necesitan Python, FFmpeg ni nada instalado
+- Compatible con Windows 10 / 11
+
+
+NOTAS
+─────
+- Si tu antivirus bloquea el .exe es un falso positivo habitual
+  con PyInstaller. Puedes añadirlo a excepciones o firmar el exe.
+- El exe tarda ~5-10 segundos en abrirse la primera vez
+  (PyInstaller extrae los archivos en un temp al arrancar).
+- Si quieres un icono personalizado, añade al build_exe.bat:
+    --icon "icono.ico"
+  (el .ico debe estar en la misma carpeta)
+
+════════════════════════════════════════════════════════
