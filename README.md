@@ -1,21 +1,36 @@
 # 🎵 Audio Downloader
 
-Descargador de audio para YouTube, SoundCloud, Vimeo, Bandcamp y +1000 plataformas más. Hecho por **Maken**.
+Descargador de audio para YouTube, SoundCloud, Vimeo, Bandcamp y +1000 plataformas más.  
+Hecho por **Maken** · Uso personal entre amigos · No redistribuir sin permiso.
 
 ---
 
 ## ✨ Características
 
-- ⬇️ Descarga audio en **MP3, AAC, FLAC, WAV u OGG**
-- 🎨 Portada incrustada automáticamente en el MP3
-- 📋 Cola de descarga con múltiples URLs o playlists enteras
-- 🌐 Compatible con YouTube, SoundCloud, Vimeo, Bandcamp, Twitter/X, Twitch y más
-- 📂 Historial de descargas con búsqueda y exportar CSV
+**Descarga**
+- ⬇️ Formatos: MP3, AAC, FLAC, WAV, OGG
+- 🎨 Portada incrustada automática (thumbnail) o imagen personalizada
+- 📋 Cola multi-URL con soporte de playlists completas
+- 🔍 Buscador integrado — sin salir de la app
+- ⭐ Favoritos — guarda URLs/canales para añadir a la cola en 1 click
+- 🔄 Detección de duplicados — no descarga lo que ya tienes
+- ⏰ Programación de descargas por hora (HH:MM)
+- ↩️ Reintentos automáticos en error de red
+- 📂 Perfiles de descarga (Música HQ / Podcast / Lossless / personalizados)
+
+**Gestión**
+- 📋 Historial con búsqueda, exportar CSV y exportar M3U
+- 🏷️ Editor de metadatos ID3 (título, artista, álbum, año, género)
+- 📊 Gráficas: descargas por mes + pie chart de formatos
 - ▶️ Reproductor de preescucha integrado
-- 🔔 Notificaciones de escritorio al terminar
-- ⚙️ Ajustes: proxy, velocidad máxima, cookies de navegador, reintentos automáticos
-- 🎨 Tema oscuro / claro con color de acento personalizable
+
+**Extra**
+- 🌙 Minimiza a bandeja del sistema (system tray)
+- 🎨 Tema oscuro / claro + color de acento personalizable
 - 🌍 Interfaz en Español e Inglés
+- 🔔 Notificaciones de escritorio al terminar
+- 🔄 Actualización de yt-dlp desde la propia app
+- ⚙️ Proxy, velocidad máxima, cookies de navegador
 
 ---
 
@@ -28,44 +43,38 @@ Descargador de audio para YouTube, SoundCloud, Vimeo, Bandcamp y +1000 plataform
 
 ---
 
-## 🛠️ Ejecutar desde el código fuente
+## 🛠️ Ejecutar desde código fuente
 
-**Requisitos:**
 ```bash
-pip install yt-dlp plyer pygame Pillow requests tkinterdnd2
-```
-
-FFmpeg (para conversión a MP3/AAC/etc.):
-→ https://www.gyan.dev/ffmpeg/builds/ — descarga `ffmpeg-release-essentials.zip` y añade la carpeta `bin\` al PATH
-
-**Ejecutar:**
-```bash
+pip install yt-dlp plyer pygame Pillow requests tkinterdnd2 mutagen matplotlib pystray
 python yt_mp3_downloader.py
 ```
 
+FFmpeg (necesario para conversión):  
+→ https://www.gyan.dev/ffmpeg/builds/ — `ffmpeg-release-essentials.zip` → añade `bin\` al PATH
+
 ---
 
-## 📦 Compilar el .exe tú mismo
+## 📦 Compilar el .exe
 
-1. Coloca `ffmpeg.exe` y `ffprobe.exe` en una carpeta `ffmpeg\` junto al código
+1. Crea carpeta `ffmpeg\` junto al código con `ffmpeg.exe` y `ffprobe.exe`
 2. Ejecuta `build_exe.bat`
-3. El exe aparece en `dist\AudioDownloader.exe`
+3. Resultado en `dist\AudioDownloader.exe`
 
-Instrucciones detalladas en `INSTRUCCIONES_BUILD.txt`
+Guía detallada en `INSTRUCCIONES_BUILD.txt`
 
 ---
 
-## 📁 Archivos del repositorio
+## 📁 Archivos
 
 | Archivo | Descripción |
 |---|---|
 | `yt_mp3_downloader.py` | Código fuente principal |
 | `build_exe.bat` | Script para compilar el .exe |
-| `INSTRUCCIONES_BUILD.txt` | Guía detallada para compilar |
+| `INSTRUCCIONES_BUILD.txt` | Guía de compilación |
 
 ---
 
 ## ⚖️ Licencia
 
-MIT — Eres libre de usarlo, modificarlo y redistribuirlo.  
-Hecho por **Maken**.
+MIT — Hecho por **Maken**.
