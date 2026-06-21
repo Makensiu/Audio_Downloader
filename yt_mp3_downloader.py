@@ -14,6 +14,23 @@ from collections import Counter
 from urllib.request import urlopen
 
 try:
+    import mutagen
+    from mutagen.easyid3 import EasyID3
+    from mutagen.id3 import ID3, APIC, error as MutagenError
+    HAS_MUTAGEN = True
+except ImportError:
+    HAS_MUTAGEN = False
+
+try:
+    import matplotlib
+    matplotlib.use("TkAgg")
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    HAS_MPL = True
+except ImportError:
+    HAS_MPL = False
+
+try:
     import yt_dlp
 except ImportError:
     import tkinter.messagebox as _mb
@@ -39,6 +56,13 @@ try:
 except ImportError:
     HAS_DND = False
 
+try:
+    import pystray
+    from pystray import MenuItem as TrayItem
+    HAS_TRAY = True
+except ImportError:
+    HAS_TRAY = False
+
 
 # ─── FFmpeg empaquetado (PyInstaller) ─────────────────────────────────────────
 def _setup_ffmpeg():
@@ -53,6 +77,38 @@ def _setup_ffmpeg():
             os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
 
 _setup_ffmpeg()
+
+FAVORITES_FILE = os.path.join(os.path.expanduser("~"), ".maken_favorites.json")
+PROFILES_FILE  = os.path.join(os.path.expanduser("~"), ".maken_profiles.json")
+
+def load_favorites():
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE,"r",encoding="utf-8") as f: return json.load(f)
+        except Exception: pass
+    return []
+
+def save_favorites(favs):
+    try:
+        with open(FAVORITES_FILE,"w",encoding="utf-8") as f: json.dump(favs,f,ensure_ascii=False,indent=2)
+    except Exception: pass
+
+def load_profiles():
+    defaults = [
+        {"name":"Música HQ","format":"MP3","quality":"320","template":"%(title)s"},
+        {"name":"Podcast",  "format":"MP3","quality":"128","template":"%(title)s"},
+        {"name":"Lossless", "format":"FLAC","quality":"320","template":"%(title)s"},
+    ]
+    if os.path.exists(PROFILES_FILE):
+        try:
+            with open(PROFILES_FILE,"r",encoding="utf-8") as f: return json.load(f)
+        except Exception: pass
+    return defaults
+
+def save_profiles(profiles):
+    try:
+        with open(PROFILES_FILE,"w",encoding="utf-8") as f: json.dump(profiles,f,ensure_ascii=False,indent=2)
+    except Exception: pass
 
 # ─── Archivos de config ───────────────────────────────────────────────────────
 CONFIG_FILE  = os.path.join(os.path.expanduser("~"), ".config.json")
@@ -131,6 +187,24 @@ STRINGS = {
         "ctx_open_browser":"🌐 Abrir en navegador","ctx_remove":"✕ Eliminar",
         "about_title":"Acerca de","about_text":"Audio Downloader \n\nHecho por Maken\nLicencia MIT · Eres libre de usarlo, modificarlo y redistribuirlo como quieras.\n\nMotor: yt-dlp  |  UI: Python/Tkinter",
         "btn_about":"ℹ Acerca de",
+        "tab_search":"  🔍 Buscar  ",
+        "search_placeholder":"Buscar canción, artista o álbum…",
+        "btn_search":"🔍 Buscar","search_results":"Resultados",
+        "btn_add_result":"＋ Añadir a cola","no_results":"Sin resultados.",
+        "searching":"Buscando…",
+        "tab_charts":"  📊 Gráficas  ",
+        "chart_monthly":"Descargas por mes","chart_formats":"Formatos",
+        "no_data_chart":"Sin datos aún. Descarga algo primero.",
+        "schedule_lbl":"⏰ Programar inicio de cola:",
+        "schedule_hint":"Formato HH:MM  (vacío = ahora)","schedule_set":"⏰ Programado para {t}",
+        "schedule_cancel":"Cancelar programación","schedule_cancelled":"Programación cancelada.",
+        "tab_metadata":"  🏷 Metadatos  ",
+        "meta_pick":"Selecciona un MP3 del historial o…",
+        "meta_open":"📂 Abrir MP3","meta_title":"Título","meta_artist":"Artista",
+        "meta_album":"Álbum","meta_year":"Año","meta_genre":"Género",
+        "meta_save":"💾 Guardar metadatos","meta_saved":"✅ Metadatos guardados.",
+        "meta_error":"❌ Error: {err}","meta_no_mutagen":"Instala mutagen:\npip install mutagen",
+        "meta_no_file":"Selecciona un archivo MP3 primero.",
     },
     "en": {
         "app_title":"Audio Downloader",
@@ -175,6 +249,24 @@ STRINGS = {
         "ctx_open_browser":"🌐 Open in browser","ctx_remove":"✕ Remove",
         "about_title":"About","about_text":"Audio Downloader \n\nMade by Maken\nMIT License · You are free to use, modify, and redistribute it as you wish.\n\nEngine: yt-dlp  |  UI: Python/Tkinter",
         "btn_about":"ℹ About",
+        "tab_search":"  🔍 Search  ",
+        "search_placeholder":"Search song, artist or album…",
+        "btn_search":"🔍 Search","search_results":"Results",
+        "btn_add_result":"＋ Add to queue","no_results":"No results.",
+        "searching":"Searching…",
+        "tab_charts":"  📊 Charts  ",
+        "chart_monthly":"Downloads per month","chart_formats":"Formats",
+        "no_data_chart":"No data yet. Download something first.",
+        "schedule_lbl":"⏰ Schedule queue start:",
+        "schedule_hint":"Format HH:MM  (empty = now)","schedule_set":"⏰ Scheduled for {t}",
+        "schedule_cancel":"Cancel schedule","schedule_cancelled":"Schedule cancelled.",
+        "tab_metadata":"  🏷 Metadata  ",
+        "meta_pick":"Select an MP3 from history or…",
+        "meta_open":"📂 Open MP3","meta_title":"Title","meta_artist":"Artist",
+        "meta_album":"Album","meta_year":"Year","meta_genre":"Genre",
+        "meta_save":"💾 Save metadata","meta_saved":"✅ Metadata saved.",
+        "meta_error":"❌ Error: {err}","meta_no_mutagen":"Install mutagen:\npip install mutagen",
+        "meta_no_file":"Select an MP3 file first.",
     },
 }
 
@@ -246,6 +338,10 @@ class App(_Base):
         self._cancel_evt    = threading.Event()
         self._thumb_img     = None
         self._player_file   = None
+        self.favorites      = load_favorites()
+        self.profiles       = load_profiles()
+        self._tray_icon     = None
+        self._custom_cover  = None
         # Carga tema activo
         self.C = self._build_theme()
         self._apply_styles()
@@ -346,9 +442,22 @@ class App(_Base):
         self.nb.add(self.tab_dl,   text=self.T("tab_download"))
         self.nb.add(self.tab_hist, text=self.T("tab_history"))
         self.nb.add(self.tab_cfg,  text=self.T("tab_settings"))
+        # Tabs adicionales
+        self.tab_search = tk.Frame(self.nb, bg=C["BG"])
+        self.tab_charts = tk.Frame(self.nb, bg=C["BG"])
+        self.tab_meta   = tk.Frame(self.nb, bg=C["BG"])
+        self.tab_favs   = tk.Frame(self.nb, bg=C["BG"])
+        self.nb.add(self.tab_search, text=self.T("tab_search"))
+        self.nb.add(self.tab_charts, text=self.T("tab_charts"))
+        self.nb.add(self.tab_meta,   text=self.T("tab_metadata"))
+        self.nb.add(self.tab_favs,   text="  ⭐ Favoritos  ")
         self._build_tab_download(self.tab_dl)
         self._build_tab_history(self.tab_hist)
         self._build_tab_settings(self.tab_cfg)
+        self._build_tab_search(self.tab_search)
+        self._build_tab_charts(self.tab_charts)
+        self._build_tab_metadata(self.tab_meta)
+        self._build_tab_favorites(self.tab_favs)
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB DESCARGAR
@@ -381,6 +490,12 @@ class App(_Base):
         self.lbl_thumb = tk.Label(self.thumb_frame, bg=C["PANEL"], fg=C["SUBTEXT"],
                                    text="🖼", font=("Segoe UI",22))
         self.lbl_thumb.pack(expand=True)
+        tk.Button(self.thumb_frame, text="🖼 Portada", font=("Segoe UI",7),
+                  bg=C["PANEL2"], fg=C["SUBTEXT"], relief="flat", cursor="hand2",
+                  command=self._pick_custom_cover).pack(fill="x", pady=(2,0))
+        self.lbl_cover_name = tk.Label(self.thumb_frame, text="", font=("Segoe UI",6),
+                                        bg=C["PANEL"], fg=C["SUCCESS"], wraplength=108)
+        self.lbl_cover_name.pack()
 
         # Botones URL
         br = tk.Frame(p, bg=C["BG"]); br.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
@@ -445,6 +560,19 @@ class App(_Base):
                            selectcolor=C["ACCENT2"], activebackground=C["BG"],
                            activeforeground=C["TEXT"]).pack(side="left", padx=3)
 
+        # Perfiles de descarga
+        cr_prof = tk.Frame(p, bg=C["BG"]); cr_prof.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(5,0))
+        tk.Label(cr_prof, text="Perfil:", font=("Segoe UI",9), bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=(0,4))
+        self.profile_var = tk.StringVar(value=self.profiles[0]["name"] if self.profiles else "")
+        self.profile_cb  = ttk.Combobox(cr_prof, textvariable=self.profile_var,
+                                         values=[p["name"] for p in self.profiles],
+                                         state="readonly", width=13, font=("Segoe UI",9))
+        self.profile_cb.pack(side="left", padx=(0,4))
+        self.profile_cb.bind("<<ComboboxSelected>>", self._apply_profile)
+        tk.Button(cr_prof, text="💾 Guardar perfil actual", font=("Segoe UI",8),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=8, pady=2, command=self._save_current_profile).pack(side="left")
+
         # Plantilla
         cr3 = tk.Frame(p, bg=C["BG"]); cr3.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(4,0))
         self.lbl_tpl = tk.Label(cr3, text=self.T("template_lbl"), font=("Segoe UI",9),
@@ -503,6 +631,21 @@ class App(_Base):
                                     bg=C["BG"], fg=C["SUBTEXT"])
         self.lbl_status.grid(row=11, column=0, columnspan=2)
 
+        # Programar inicio
+        sched_f = tk.Frame(p, bg=C["BG"]); sched_f.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(6,0))
+        self.lbl_sched = tk.Label(sched_f, text=self.T("schedule_lbl"), font=("Segoe UI",9),
+                                   bg=C["BG"], fg=C["SUBTEXT"])
+        self.lbl_sched.pack(side="left")
+        self.schedule_var = tk.StringVar()
+        tk.Entry(sched_f, textvariable=self.schedule_var, font=("Consolas",9),
+                  bg=C["PANEL"], fg=C["TEXT"], insertbackground=C["TEXT"],
+                  relief="flat", bd=4, width=7).pack(side="left", padx=(6,0), ipady=3)
+        tk.Label(sched_f, text=self.T("schedule_hint"), font=("Segoe UI",7),
+                 bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=6)
+        self.lbl_sched_info = tk.Label(sched_f, text="", font=("Segoe UI",8),
+                                        bg=C["BG"], fg=C["WARNING"])
+        self.lbl_sched_info.pack(side="left", padx=4)
+
         # Botones descarga/cancelar
         btn_row = tk.Frame(p, bg=C["BG"]); btn_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(7,0))
         btn_row.columnconfigure(0, weight=1)
@@ -550,6 +693,9 @@ class App(_Base):
         self.search_entry.bind("<FocusIn>",  self._search_focus_in)
         self.search_entry.bind("<FocusOut>", self._search_focus_out)
         self.search_entry.pack(side="left", fill="x", expand=True, ipady=4)
+        tk.Button(sr, text="📋 M3U", font=("Segoe UI",9),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=8, pady=3, command=lambda: self._export_m3u(auto=False)).pack(side="right", padx=(5,0))
         self.btn_export = tk.Button(sr, text=self.T("btn_export_csv"), font=("Segoe UI",9),
                                      bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
                                      padx=8, pady=3, command=self._export_csv)
@@ -716,6 +862,426 @@ class App(_Base):
         self.lbl_update_status = tk.Label(upd_f, text="", font=("Segoe UI",9),
                                            bg=C["BG"], fg=C["SUCCESS"])
         self.lbl_update_status.pack(side="left", padx=12)
+
+
+
+
+    # ════════════════════════════════════════════════════════════════════════
+    # PORTADA PERSONALIZADA
+    # ════════════════════════════════════════════════════════════════════════
+    def _pick_custom_cover(self):
+        path = filedialog.askopenfilename(
+            title="Elegir imagen de portada",
+            filetypes=[("Imágenes","*.jpg *.jpeg *.png *.webp"),("All","*.*")])
+        if path:
+            self._custom_cover = path
+            self.lbl_cover_name.configure(text=f"✔ {os.path.basename(path)[:18]}")
+            if HAS_PIL:
+                try:
+                    img = Image.open(path).resize((112,63), Image.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+                    self._thumb_img = photo
+                    self.lbl_thumb.configure(image=photo, text="")
+                except Exception: pass
+        else:
+            self._custom_cover = None
+            self.lbl_cover_name.configure(text="")
+            self.lbl_thumb.configure(image="", text="🖼", font=("Segoe UI",22))
+
+    def _embed_custom_cover(self, filepath):
+        if not HAS_MUTAGEN or not self._custom_cover or not os.path.exists(filepath): return
+        try:
+            from mutagen.mp3 import MP3
+            from mutagen.id3 import ID3, APIC
+            with open(self._custom_cover,"rb") as f: img_data = f.read()
+            mime = "image/jpeg" if self._custom_cover.lower().endswith((".jpg",".jpeg")) else "image/png"
+            audio = MP3(filepath, ID3=ID3)
+            try: audio.add_tags()
+            except Exception: pass
+            audio.tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=img_data))
+            audio.save()
+            self._log(f"🖼 Portada personalizada: {os.path.basename(filepath)}")
+        except Exception as e:
+            self._log(f"⚠️  Error portada: {e}")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # PERFILES DE DESCARGA
+    # ════════════════════════════════════════════════════════════════════════
+    def _apply_profile(self, _=None):
+        name = self.profile_var.get()
+        for p in self.profiles:
+            if p["name"] == name:
+                self.format_var.set(p.get("format","MP3"))
+                self.quality_var.set(p.get("quality","320"))
+                self.template_var.set(p.get("template","%(title)s"))
+                self._on_format_change(); break
+
+    def _save_current_profile(self):
+        name = self.profile_var.get().strip()
+        if not name: return
+        new_p = {"name":name,"format":self.format_var.get(),
+                 "quality":self.quality_var.get(),"template":self.template_var.get()}
+        for i,p in enumerate(self.profiles):
+            if p["name"] == name:
+                self.profiles[i] = new_p; save_profiles(self.profiles)
+                self._log(f"💾 Perfil '{name}' actualizado"); return
+        self.profiles.append(new_p)
+        save_profiles(self.profiles)
+        self.profile_cb.configure(values=[p["name"] for p in self.profiles])
+        self._log(f"💾 Perfil '{name}' guardado")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # EXPORTAR M3U
+    # ════════════════════════════════════════════════════════════════════════
+    def _export_m3u(self, auto=False):
+        if not self.history: return
+        path = (os.path.join(self.output_dir,"playlist.m3u") if auto else
+                filedialog.asksaveasfilename(defaultextension=".m3u",
+                    filetypes=[("Playlist M3U","*.m3u")], initialfile="playlist.m3u"))
+        if not path: return
+        try:
+            with open(path,"w",encoding="utf-8") as f:
+                f.write("#EXTM3U\n")
+                for r in self.history:
+                    fp = r.get("filepath","")
+                    try:
+                        parts = r.get("duracion","0:00").split(":")
+                        secs  = int(parts[0])*60 + int(parts[1])
+                    except Exception: secs = -1
+                    f.write(f"#EXTINF:{secs},{r.get('titulo','—')} - {r.get('canal','—')}\n")
+                    if fp and os.path.exists(fp): f.write(fp + "\n")
+            if not auto: self._set_status(f"✅ M3U: {path}", self.C["SUCCESS"])
+            self._log(f"📋 M3U: {path}")
+        except Exception as e: self._log(f"ERROR M3U: {e}")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB FAVORITOS
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_favorites(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=18, pady=14)
+        p.pack(fill="both", expand=True)
+        p.columnconfigure(0, weight=1); p.rowconfigure(1, weight=1)
+
+        top = tk.Frame(p, bg=C["BG"]); top.grid(row=0, column=0, sticky="ew", pady=(0,8))
+        top.columnconfigure(0, weight=1)
+        self.fav_entry_var = tk.StringVar()
+        fe = tk.Entry(top, textvariable=self.fav_entry_var, font=("Segoe UI",10),
+                      bg=C["PANEL"], fg=C["SUBTEXT"], insertbackground=C["TEXT"],
+                      relief="flat", bd=6)
+        fe.insert(0, "Pega una URL o nombre para guardar como favorito…")
+        fe.bind("<FocusIn>", lambda e: (fe.delete(0,"end"), fe.configure(fg=C["TEXT"]))
+                              if "Pega" in fe.get() else None)
+        fe.grid(row=0, column=0, sticky="ew", ipady=4, padx=(0,8))
+        tk.Button(top, text="⭐ Guardar", font=("Segoe UI",9,"bold"),
+                  bg=C["ACCENT"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=10, pady=4, command=self._fav_add).grid(row=0, column=1)
+
+        fav_outer = tk.Frame(p, bg=C["PANEL"]); fav_outer.grid(row=1, column=0, sticky="nsew")
+        fav_outer.rowconfigure(0, weight=1); fav_outer.columnconfigure(0, weight=1)
+        self.fav_list = tk.Listbox(fav_outer, font=("Segoe UI",10),
+                                    bg=C["PANEL"], fg=C["TEXT"], relief="flat",
+                                    selectbackground=C["ACCENT2"], activestyle="none", bd=6)
+        fav_sb = tk.Scrollbar(fav_outer, command=self.fav_list.yview)
+        self.fav_list.configure(yscrollcommand=fav_sb.set)
+        self.fav_list.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        fav_sb.grid(row=0, column=1, sticky="ns")
+        self.fav_list.bind("<Double-1>", self._fav_send_to_queue)
+        self._fav_refresh()
+
+        bf = tk.Frame(p, bg=C["BG"]); bf.grid(row=2, column=0, sticky="ew", pady=(6,0))
+        tk.Button(bf, text="⬇ Añadir a cola", font=("Segoe UI",9,"bold"),
+                  bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=12, pady=5, command=self._fav_send_to_queue).pack(side="left")
+        tk.Button(bf, text="✕ Eliminar", font=("Segoe UI",9),
+                  bg=C["PANEL"], fg=C["SUBTEXT"], relief="flat", cursor="hand2",
+                  padx=10, pady=5, command=self._fav_remove).pack(side="left", padx=(6,0))
+        tk.Label(bf, text="Doble click → añadir a cola directamente",
+                 font=("Segoe UI",8), bg=C["BG"], fg=C["SUBTEXT"]).pack(side="right")
+
+    def _fav_refresh(self):
+        try:
+            self.fav_list.delete(0,"end")
+            for fav in self.favorites:
+                self.fav_list.insert("end", (fav.get("name") or fav.get("url",""))[:80])
+        except Exception: pass
+
+    def _fav_add(self):
+        val = self.fav_entry_var.get().strip()
+        if not val or "Pega" in val: return
+        entry = {"name": val[:60], "url": val}
+        if not any(f.get("url")==val for f in self.favorites):
+            self.favorites.append(entry)
+            save_favorites(self.favorites)
+            self._fav_refresh()
+            self.fav_entry_var.set("")
+
+    def _fav_remove(self):
+        sel = self.fav_list.curselection()
+        if not sel: return
+        self.favorites.pop(sel[0])
+        save_favorites(self.favorites)
+        self._fav_refresh()
+
+    def _fav_send_to_queue(self, _=None):
+        sel = self.fav_list.curselection()
+        if not sel: return
+        fav = self.favorites[sel[0]]
+        url = fav.get("url","")
+        if url and url not in self.queue:
+            self.queue.append(url)
+            self.queue_list.insert("end", fav.get("name","")[:74])
+            self._update_queue_count()
+            self._set_status(self.T("status_added",n=1), self.C["SUCCESS"])
+            self.nb.select(0)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB BÚSQUEDA
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_search(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=18, pady=14)
+        p.pack(fill="both", expand=True)
+        p.columnconfigure(0, weight=1); p.rowconfigure(2, weight=1)
+
+        sf = tk.Frame(p, bg=C["BG"]); sf.grid(row=0, column=0, sticky="ew", pady=(0,8))
+        sf.columnconfigure(0, weight=1)
+        self.search_query_var = tk.StringVar()
+        self._search_ph = "Buscar canción, artista o álbum…"
+        se = tk.Entry(sf, textvariable=self.search_query_var, font=("Segoe UI",11),
+                      bg=C["PANEL"], fg=C["SUBTEXT"], insertbackground=C["TEXT"],
+                      relief="flat", bd=8)
+        se.insert(0, self._search_ph)
+        se.bind("<FocusIn>",  lambda e: (se.delete(0,"end"), se.configure(fg=C["TEXT"]))
+                              if se.get()==self._search_ph else None)
+        se.bind("<Return>", lambda e: self._do_search())
+        se.grid(row=0, column=0, sticky="ew", ipady=5)
+        self.btn_do_search = tk.Button(sf, text="🔍 Buscar",
+                                        font=("Segoe UI",10,"bold"), bg=C["ACCENT"], fg=C["TEXT"],
+                                        relief="flat", cursor="hand2", padx=14, pady=5,
+                                        activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
+                                        command=self._do_search)
+        self.btn_do_search.grid(row=0, column=1, padx=(8,0))
+
+        self.lbl_search_status = tk.Label(p, text="", font=("Segoe UI",9), bg=C["BG"], fg=C["SUBTEXT"])
+        self.lbl_search_status.grid(row=1, column=0, sticky="w", pady=(0,4))
+
+        res_outer = tk.Frame(p, bg=C["PANEL"]); res_outer.grid(row=2, column=0, sticky="nsew")
+        res_outer.rowconfigure(0, weight=1); res_outer.columnconfigure(0, weight=1)
+        self.search_tree = ttk.Treeview(res_outer,
+                                         columns=("titulo","canal","duracion"),
+                                         show="headings", style="Hist.Treeview")
+        for cid,w,lbl in [("titulo",420,"Título"),("canal",160,"Canal"),("duracion",70,"Dur.")]:
+            self.search_tree.heading(cid, text=lbl)
+            self.search_tree.column(cid, width=w, anchor="w", stretch=(cid=="titulo"))
+        s_vsb = tk.Scrollbar(res_outer, orient="vertical", command=self.search_tree.yview)
+        self.search_tree.configure(yscrollcommand=s_vsb.set)
+        self.search_tree.grid(row=0, column=0, sticky="nsew")
+        s_vsb.grid(row=0, column=1, sticky="ns")
+        self._search_results_urls = []
+
+        bf = tk.Frame(p, bg=C["BG"]); bf.grid(row=3, column=0, sticky="ew", pady=(6,0))
+        tk.Button(bf, text="＋ Añadir a cola", font=("Segoe UI",10,"bold"),
+                  bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=14, pady=6, activebackground=C["ACCENT"], activeforeground=C["TEXT"],
+                  command=self._add_search_result_to_queue).pack(side="left")
+        tk.Label(bf, text="Doble click o selecciona y pulsa ＋", font=("Segoe UI",8),
+                 bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=10)
+        self.search_tree.bind("<Double-1>", lambda e: self._add_search_result_to_queue())
+
+    def _do_search(self):
+        q = self.search_query_var.get().strip()
+        if not q or q == self._search_ph: return
+        self.lbl_search_status.configure(text="Buscando…", fg=self.C["SUBTEXT"])
+        self.btn_do_search.configure(state="disabled")
+        threading.Thread(target=self._search_worker, args=(q,), daemon=True).start()
+
+    def _search_worker(self, query):
+        try:
+            opts = {"quiet":True,"no_warnings":True,"extract_flat":True,
+                    "skip_download":True,"playlistend":12}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(f"ytsearch12:{query}", download=False)
+            entries = info.get("entries",[]) or []
+            results = []
+            for e in entries:
+                if not e: continue
+                dur = e.get("duration") or 0
+                m,s = divmod(int(dur),60)
+                results.append({
+                    "titulo":   e.get("title","—"),
+                    "canal":    e.get("uploader") or e.get("channel","—"),
+                    "duracion": f"{m}:{s:02d}",
+                    "url":      e.get("url") or e.get("webpage_url",""),
+                })
+            self.after(0, lambda r=results: self._show_search_results(r))
+        except Exception as ex:
+            self.after(0, lambda: self.lbl_search_status.configure(
+                text=f"Error: {ex}", fg=self.C["ERROR"]))
+        finally:
+            self.after(0, lambda: self.btn_do_search.configure(state="normal"))
+
+    def _show_search_results(self, results):
+        self.search_tree.delete(*self.search_tree.get_children())
+        self._search_results_urls = []
+        if not results:
+            self.lbl_search_status.configure(text="Sin resultados.", fg=self.C["WARNING"]); return
+        for r in results:
+            self.search_tree.insert("","end", values=(r["titulo"],r["canal"],r["duracion"]))
+            self._search_results_urls.append(r["url"])
+        self.lbl_search_status.configure(
+            text=f"{len(results)} resultados", fg=self.C["SUCCESS"])
+
+    def _add_search_result_to_queue(self):
+        sel = self.search_tree.focus()
+        if not sel: return
+        idx = list(self.search_tree.get_children()).index(sel)
+        if idx >= len(self._search_results_urls): return
+        url = self._search_results_urls[idx]
+        if url and url not in self.queue:
+            self.queue.append(url)
+            title = self.search_tree.item(sel,"values")[0]
+            self.queue_list.insert("end", (title[:74]+"…") if len(title)>74 else title)
+            self._update_queue_count()
+            self._set_status(self.T("status_added",n=1), self.C["SUCCESS"])
+            self.nb.select(0)   # volver a tab Descargar
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB GRÁFICAS
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_charts(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=18, pady=14)
+        p.pack(fill="both", expand=True)
+        p.columnconfigure(0, weight=1); p.rowconfigure(0, weight=1)
+        self.charts_frame = p
+
+    def _refresh_charts(self):
+        """Regenera gráficas. Silencia si matplotlib no está instalado."""
+        if not HAS_MPL: return
+        try:
+            if not self.charts_frame.winfo_exists(): return
+        except Exception: return
+        C = self.C
+        for w in self.charts_frame.winfo_children(): w.destroy()
+        h = self.history
+        if not h:
+            tk.Label(self.charts_frame, text="Sin datos aún. Descarga algo primero.",
+                     font=("Segoe UI",11), bg=C["BG"], fg=C["SUBTEXT"]).pack(expand=True)
+            return
+
+        fig = Figure(figsize=(8,4), dpi=90, facecolor=C["BG"])
+        fig.subplots_adjust(wspace=0.35, left=0.08, right=0.97, top=0.88, bottom=0.18)
+
+        # Barras: descargas por mes
+        ax1 = fig.add_subplot(1,2,1)
+        month_counter = Counter()
+        for r in h:
+            try: month_counter[r.get("fecha","")[:5]] += 1
+            except Exception: pass
+        months = sorted(month_counter.keys())[-8:]
+        vals   = [month_counter[m] for m in months]
+        bars   = ax1.bar(months, vals, color=C["ACCENT"], edgecolor="none")
+        ax1.set_facecolor(C["PANEL2"]); ax1.tick_params(colors=C["TEXT"], labelsize=7)
+        for sp in ax1.spines.values(): sp.set_visible(False)
+        ax1.set_title("Descargas por mes", color=C["TEXT"], fontsize=9, pad=8)
+        for bar,v in zip(bars,vals):
+            ax1.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.05,
+                     str(v), ha="center", va="bottom", fontsize=7, color=C["TEXT"])
+
+        # Pie: formatos
+        ax2 = fig.add_subplot(1,2,2)
+        fmt_c  = Counter(r.get("formato","?") for r in h)
+        COLORS = ["#e94560","#0f3460","#4ade80","#facc15","#a78bfa"]
+        ax2.pie(list(fmt_c.values()), labels=list(fmt_c.keys()), autopct="%1.0f%%",
+                colors=COLORS[:len(fmt_c)],
+                textprops={"color":C["TEXT"],"fontsize":8},
+                wedgeprops={"edgecolor":C["BG"],"linewidth":2})
+        ax2.set_facecolor(C["BG"])
+        ax2.set_title("Formatos", color=C["TEXT"], fontsize=9, pad=8)
+
+        canvas = FigureCanvasTkAgg(fig, master=self.charts_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB METADATOS
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_metadata(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=28, pady=18)
+        p.pack(fill="both", expand=True); p.columnconfigure(1, weight=1)
+
+        # Selector archivo
+        ff = tk.Frame(p, bg=C["BG"]); ff.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0,12))
+        self.meta_path_var = tk.StringVar(value="")
+        tk.Label(ff, textvariable=self.meta_path_var, font=("Segoe UI",8),
+                 bg=C["BG"], fg=C["ACCENT"], wraplength=500, justify="left").pack(side="left", fill="x", expand=True)
+        tk.Button(ff, text="📂 Abrir MP3", font=("Segoe UI",9),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=10, pady=4, command=self._meta_open_file).pack(side="right")
+
+        tk.Frame(p, bg=C["PANEL"], height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0,14))
+
+        # Campos
+        self._meta_vars = {}
+        for i,(lbl_txt,tag) in enumerate([("Título","title"),("Artista","artist"),
+                                           ("Álbum","album"),("Año","date"),("Género","genre")]):
+            tk.Label(p, text=lbl_txt, font=("Segoe UI",10),
+                     bg=C["BG"], fg=C["TEXT"]).grid(row=i+2, column=0, sticky="w", pady=6, padx=(0,16))
+            var = tk.StringVar()
+            tk.Entry(p, textvariable=var, font=("Segoe UI",10),
+                     bg=C["PANEL"], fg=C["TEXT"], insertbackground=C["TEXT"],
+                     relief="flat", bd=6).grid(row=i+2, column=1, sticky="ew", pady=6)
+            self._meta_vars[tag] = var
+
+        tk.Frame(p, bg=C["PANEL"], height=1).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(12,10))
+        sf2 = tk.Frame(p, bg=C["BG"]); sf2.grid(row=9, column=0, columnspan=2, sticky="w")
+        tk.Button(sf2, text="💾 Guardar metadatos", font=("Segoe UI",11,"bold"),
+                  bg=C["ACCENT"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=16, pady=8, activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
+                  command=self._meta_save).pack(side="left")
+        self.lbl_meta_status = tk.Label(sf2, text="", font=("Segoe UI",9),
+                                         bg=C["BG"], fg=C["SUCCESS"])
+        self.lbl_meta_status.pack(side="left", padx=12)
+        tk.Label(p, text="Tip: doble click en Historial carga el archivo aquí automáticamente",
+                 font=("Segoe UI",7), bg=C["BG"], fg=C["SUBTEXT"]).grid(
+                 row=10, column=0, columnspan=2, sticky="w", pady=(8,0))
+
+    def _meta_open_file(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("MP3","*.mp3"),("Audio","*.mp3 *.aac *.flac *.ogg"),("All","*.*")],
+            initialdir=self.output_dir)
+        if path: self._meta_load(path)
+
+    def _meta_load(self, path):
+        self.meta_path_var.set(path)
+        if not HAS_MUTAGEN: return
+        try:
+            audio = EasyID3(path)
+            for tag,var in self._meta_vars.items():
+                var.set((audio.get(tag) or [""])[0])
+        except Exception:
+            for var in self._meta_vars.values(): var.set("")
+
+    def _meta_save(self):
+        path = self.meta_path_var.get()
+        if not path:
+            self.lbl_meta_status.configure(text="Selecciona un archivo MP3 primero.", fg=self.C["WARNING"]); return
+        if not HAS_MUTAGEN:
+            messagebox.showinfo("mutagen","Instala mutagen:\npip install mutagen"); return
+        try:
+            try:   audio = EasyID3(path)
+            except MutagenError: audio = mutagen.File(path, easy=True); audio.add_tags()
+            for tag,var in self._meta_vars.items():
+                v = var.get().strip()
+                if v: audio[tag] = v
+                elif tag in audio: del audio[tag]
+            audio.save()
+            self.lbl_meta_status.configure(text="✅ Metadatos guardados.", fg=self.C["SUCCESS"])
+            self.after(3000, lambda: self.lbl_meta_status.configure(text=""))
+        except Exception as e:
+            self.lbl_meta_status.configure(text=f"❌ Error: {str(e)[:60]}", fg=self.C["ERROR"])
 
     # ════════════════════════════════════════════════════════════════════════
     # COLA — helpers + menú contextual
@@ -917,6 +1483,40 @@ class App(_Base):
         if self.url_text.get("1.0","end").strip() and not self.queue: self._add_to_queue()
         if not self.queue:
             messagebox.showwarning(self.T("warn_empty_q_title"), self.T("warn_empty_queue")); return
+        # Comprobar programación de tiempo
+        sched = self.schedule_var.get().strip()
+        if sched:
+            try:
+                h,m = map(int, sched.split(":"))
+                now = datetime.datetime.now()
+                target = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                if target <= now: target += datetime.timedelta(days=1)   # mañana si ya pasó
+                delay_s = (target - now).total_seconds()
+                self.lbl_sched_info.configure(text=self.T("schedule_set",t=sched))
+                self._set_status(self.T("schedule_set",t=sched), self.C["WARNING"])
+                # Lanzar en background con delay
+                def _delayed():
+                    import time; time.sleep(delay_s)
+                    if not self._cancel_evt.is_set():
+                        self.after(0, self._launch_queue)
+                threading.Thread(target=_delayed, daemon=True).start()
+                # Botón cancelar sirve también para cancelar la programación
+                self.btn_cancel.configure(state="normal",
+                    command=lambda: (self._cancel_evt.set(),
+                                     self.lbl_sched_info.configure(text=""),
+                                     self._set_status(self.T("schedule_cancelled"), self.C["SUBTEXT"]),
+                                     self.btn_cancel.configure(state="disabled",
+                                         command=self._cancel_download)))
+                return
+            except ValueError:
+                pass   # formato incorrecto → ignorar y descargar ahora
+        self._launch_queue()
+
+    def _launch_queue(self):
+        """Arranca la cola inmediatamente (sin programación)."""
+        self.lbl_sched_info.configure(text="")
+        self.schedule_var.set("")
+        self.btn_cancel.configure(command=self._cancel_download)
         self.is_downloading = True; self._completed = 0; self._cancel_evt.clear()
         self.btn_download.configure(state="disabled", text=self.T("downloading"))
         self.btn_cancel.configure(state="normal")
@@ -970,6 +1570,32 @@ class App(_Base):
 
         opts = self._build_ydl_opts(fmt, quality, template, hook)
 
+        # Portada personalizada — sobreescribe EmbedThumbnail si el usuario eligió una
+        if self._custom_cover and os.path.exists(self._custom_cover) and fmt == "MP3":
+            opts["writethumbnail"] = False
+            opts["postprocessors"] = [pp for pp in opts.get("postprocessors",[])
+                                      if pp.get("key") != "EmbedThumbnail"]
+
+        # Detección de duplicados (pre-check sin descargar)
+        def _already_exists(title, folder, ext):
+            safe = "".join(c for c in title if c not in r'\/:*?"<>|')[:60].strip().lower()
+            return any(safe in fn.lower() and fn.lower().endswith(f".{ext}")
+                       for fn in (os.listdir(folder) if os.path.isdir(folder) else []))
+
+        ext_chk = FORMATS[fmt]["codec"].replace("vorbis","ogg")
+        try:
+            with yt_dlp.YoutubeDL({"quiet":True,"no_warnings":True,"skip_download":True}) as ydl:
+                pre = ydl.extract_info(url, download=False)
+            pre_entries = ([e for e in pre.get("entries",[]) if e]
+                           if pre and pre.get("_type")=="playlist" else [pre] if pre else [])
+            dupes = [e.get("title","?") for e in pre_entries
+                     if _already_exists(e.get("title",""), self.output_dir, ext_chk)]
+            if dupes:
+                self._log(f"⚠️  Ya existen {len(dupes)} archivo(s): {', '.join(dupes[:2])}{'…' if len(dupes)>2 else ''}")
+                if len(dupes) == len(pre_entries):
+                    self._log("✅ Todos ya descargados — saltando"); return
+        except Exception: pass   # si falla el pre-check, continuar igual
+
         for attempt in range(max_retries+1):
             if self._cancel_evt.is_set(): return
             if attempt > 0: self._log(self.T("retry_log",n=attempt,max=max_retries))
@@ -994,6 +1620,16 @@ class App(_Base):
                     self._completed += 1
                 save_history(self.history)
                 self.after(0, self._refresh_history); self.after(0, self._refresh_stats)
+                self.after(0, self._refresh_charts)
+                # Portada personalizada tras conversión
+                if self._custom_cover:
+                    for e in entries:
+                        fn = template
+                        for var in ["title","uploader","artist"]:
+                            fn = fn.replace(f"%({var})s", e.get(var,"") or "")
+                        fpath = os.path.join(self.output_dir, fn.strip()+".mp3")
+                        if os.path.exists(fpath):
+                            self.after(100, lambda fp=fpath: self._embed_custom_cover(fp))
                 self._log(f"✅ {url}")
                 return   # éxito — salir del loop de reintentos
 
@@ -1026,6 +1662,7 @@ class App(_Base):
         if not self._cancel_evt.is_set():
             self._set_status(self.T("status_done",n=n,fmt=fmt,folder=self.output_dir), self.C["SUCCESS"])
             desktop_notify(self.T("notif_title"), self.T("notif_msg",n=n,fmt=fmt))
+            self._export_m3u(auto=True)
 
     # ════════════════════════════════════════════════════════════════════════
     # HISTORIAL
@@ -1049,11 +1686,19 @@ class App(_Base):
         self._refresh_history([r for r in self.history
                                if q in r.get("titulo","").lower() or q in r.get("canal","").lower()])
 
-    def _open_hist_folder(self, _):
+    def _open_hist_folder(self, event):
         sel = self.hist_tree.focus()
         if not sel: return
         vals = self.hist_tree.item(sel,"values")
         if len(vals)>=6: open_folder(vals[5])
+        # Cargar filepath en tab metadatos si existe
+        titulo = vals[0] if vals else ""
+        for r in reversed(self.history):
+            if r.get("titulo","") == titulo:
+                fp = r.get("filepath","")
+                if fp and os.path.exists(fp):
+                    self._meta_load(fp)
+                break
 
     def _clear_history(self):
         if messagebox.askyesno(self.T("confirm_title"),self.T("confirm_clear")):
@@ -1081,6 +1726,7 @@ class App(_Base):
         self.stats_labels["stats_fmt"].configure(text=top_fmt)
         self.stats_labels["stats_platform"].configure(text=(top_ch[:18] if h else "—"))
         self.stats_labels["stats_mb"].configure(text=f"{estimate_mb(h)} MB")
+        self._refresh_charts()
 
     # ════════════════════════════════════════════════════════════════════════
     # REPRODUCTOR
@@ -1160,4 +1806,28 @@ class App(_Base):
 if __name__ == "__main__":
     app = App()
     app.geometry("840x820"); app.minsize(740,720)
+
+    def _on_close():
+        if HAS_TRAY:
+            app.withdraw()
+            if app._tray_icon is None:
+                try:
+                    from PIL import Image as _PI, ImageDraw as _PID
+                    ico = _PI.new("RGBA",(64,64),(0,0,0,0))
+                    d   = _PID.Draw(ico)
+                    hx  = app.C.get("ACCENT","#e94560").lstrip("#")
+                    rgb = tuple(int(hx[i:i+2],16) for i in (0,2,4))
+                    d.ellipse([4,4,60,60], fill=rgb+(255,))
+                except Exception:
+                    from PIL import Image as _PI
+                    ico = _PI.new("RGBA",(64,64),(233,69,96,255))
+                def _show(icon,item): app.after(0, app.deiconify)
+                def _quit(icon,item): icon.stop(); app.after(0, app.destroy)
+                menu = pystray.Menu(TrayItem("Abrir",_show,default=True), TrayItem("Salir",_quit))
+                app._tray_icon = pystray.Icon("AudioDownloader", ico, "Audio Downloader", menu)
+                threading.Thread(target=app._tray_icon.run, daemon=True).start()
+        else:
+            app.destroy()
+
+    app.protocol("WM_DELETE_WINDOW", _on_close)
     app.mainloop()
