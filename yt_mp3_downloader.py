@@ -63,6 +63,12 @@ try:
 except ImportError:
     HAS_TRAY = False
 
+try:
+    import syncedlyrics
+    HAS_LYRICS = True
+except ImportError:
+    HAS_LYRICS = False
+
 
 # ─── FFmpeg empaquetado (PyInstaller) ─────────────────────────────────────────
 def _setup_ffmpeg():
@@ -78,8 +84,8 @@ def _setup_ffmpeg():
 
 _setup_ffmpeg()
 
-FAVORITES_FILE = os.path.join(os.path.expanduser("~"), ".maken_favorites.json")
-PROFILES_FILE  = os.path.join(os.path.expanduser("~"), ".maken_profiles.json")
+FAVORITES_FILE = os.path.join(os.path.expanduser("~"), ".favorites.json")
+PROFILES_FILE  = os.path.join(os.path.expanduser("~"), ".profiles.json")
 
 def load_favorites():
     if os.path.exists(FAVORITES_FILE):
@@ -127,18 +133,22 @@ PLATFORMS = "YouTube · SoundCloud · Vimeo · Bandcamp · Twitter/X · Twitch �
 # ─── Temas ────────────────────────────────────────────────────────────────────
 THEMES = {
     "dark": {
-        "BG":"#1a1a2e","PANEL":"#16213e","PANEL2":"#1e2a45",
-        "ACCENT":"#e94560","ACCENT2":"#0f3460",
-        "TEXT":"#eaeaea","SUBTEXT":"#a0a0b0",
-        "SUCCESS":"#4ade80","WARNING":"#facc15","ERROR":"#f87171",
-        "HIST_BG":"#111827",
+        "BG":"#111318","PANEL":"#1c1f26","PANEL2":"#22252e",
+        "SIDEBAR":"#16181f","SIDEBAR_ACTIVE":"#2a2d38",
+        "ACCENT":"#e94560","ACCENT2":"#1e3a5f",
+        "ACCENT_SOFT":"#1e2535",
+        "TEXT":"#e8eaf0","SUBTEXT":"#8b909e","MUTED":"#555a68",
+        "SUCCESS":"#3dd68c","WARNING":"#f5a623","ERROR":"#f06565",
+        "HIST_BG":"#0e1015","BORDER":"#2a2d38","CARD":"#1c1f26",
     },
     "light": {
-        "BG":"#f0f2f5","PANEL":"#ffffff","PANEL2":"#e4e8ef",
-        "ACCENT":"#e94560","ACCENT2":"#2563eb",
-        "TEXT":"#111827","SUBTEXT":"#6b7280",
+        "BG":"#f4f6fa","PANEL":"#ffffff","PANEL2":"#eef0f6",
+        "SIDEBAR":"#ffffff","SIDEBAR_ACTIVE":"#eef2ff",
+        "ACCENT":"#e94560","ACCENT2":"#3b5bdb",
+        "ACCENT_SOFT":"#eef2ff",
+        "TEXT":"#1a1d27","SUBTEXT":"#5c6070","MUTED":"#9ca3af",
         "SUCCESS":"#16a34a","WARNING":"#d97706","ERROR":"#dc2626",
-        "HIST_BG":"#f9fafb",
+        "HIST_BG":"#f9fafb","BORDER":"#e2e6f0","CARD":"#ffffff",
     },
 }
 
@@ -146,15 +156,15 @@ THEMES = {
 STRINGS = {
     "es": {
         "app_title":"Audio Downloader",
-        "tab_download":"  ⬇ Descargar  ","tab_history":"  📋 Historial  ",
-        "tab_settings":"  ⚙ Ajustes  ",
+        "tab_download":"  Descargar  ","tab_history":"  Historial  ",
+        "tab_settings":"  Ajustes  ",
         "url_label":"URL  (una por línea — arrastra desde el navegador o pega aquí)",
-        "btn_info":"✦ Ver Info","btn_add":"＋ Añadir a cola","btn_clear_url":"🗑 Limpiar",
-        "folder_lbl":"📁 Carpeta:","btn_change":"Cambiar","btn_open_folder":"📂 Abrir carpeta",
+        "btn_info":"Ver Info","btn_add":"Añadir a cola","btn_clear_url":"Limpiar",
+        "folder_lbl":"Carpeta:","btn_change":"Cambiar","btn_open_folder":"Abrir carpeta",
         "fmt_lbl":"Formato:","quality_lbl":"Calidad:","template_lbl":"Nombre archivo:",
-        "queue_lbl":"Cola de descarga","btn_remove":"✕ Eliminar",
-        "btn_clear_q":"🗑 Vaciar cola","in_queue":"{n} en cola",
-        "btn_cancel":"⏹ Cancelar","btn_download":"⬇  DESCARGAR COLA",
+        "queue_lbl":"Cola de descarga","btn_remove":"Eliminar",
+        "btn_clear_q":"Vaciar cola","in_queue":"{n} en cola",
+        "btn_cancel":"Cancelar","btn_download":"DESCARGAR COLA",
         "downloading":"Descargando…","log_lbl":"Log",
         "status_paste":"Pega URLs o arrástralas desde el navegador",
         "status_fetching":"Obteniendo información…","status_info_ok":"Info cargada.",
@@ -163,8 +173,8 @@ STRINGS = {
         "status_cancelled":"⏹ Cancelada.","status_eta":"[{i}/{t}] {pct:.1f}%  {speed}  ETA {eta}",
         "warn_empty_queue":"Añade al menos una URL.","warn_empty_q_title":"Cola vacía",
         "notif_title":"Audio Downloader — ¡Listo!","notif_msg":"{n} archivo(s) {fmt} descargados.",
-        "hist_search":"Buscar…","btn_clear_hist":"🗑 Borrar historial",
-        "btn_export_csv":"📥 Exportar CSV","hist_entries":"{n} entrada(s)",
+        "hist_search":"Buscar…","btn_clear_hist":"Borrar historial",
+        "btn_export_csv":"Exportar CSV","hist_entries":"{n} entrada(s)",
         "col_title":"Título","col_channel":"Canal","col_fmt":"Fmt",
         "col_dur":"Dur.","col_date":"Fecha","col_folder":"Carpeta",
         "dblclick_hint":"Doble click → abrir carpeta  |  Seleccionar + ▶ para escuchar",
@@ -178,45 +188,58 @@ STRINGS = {
         "concurrent_lbl":"Paralelo:","retries_lbl":"Reintentos auto:",
         "theme_lbl":"Tema:","theme_dark":"Oscuro","theme_light":"Claro",
         "accent_lbl":"Color de acento:","btn_pick_accent":"🎨 Elegir color",
-        "btn_save_settings":"💾 Guardar ajustes","settings_saved":"✅ Guardado.",
-        "btn_update_ytdlp":"🔄 Actualizar yt-dlp","updating":"Actualizando…",
+        "btn_save_settings":"Guardar ajustes","settings_saved":"✅ Guardado.",
+        "btn_update_ytdlp":"Actualizar yt-dlp","updating":"Actualizando…",
         "update_ok":"✅ yt-dlp actualizado.","update_fail":"❌ Error: {err}",
         "no_audio_file":"No se encontró el archivo. ¿Ya fue descargado?",
         "pygame_missing":"Instala pygame:\npip install pygame",
-        "ctx_move_up":"⬆ Mover arriba","ctx_move_down":"⬇ Mover abajo",
-        "ctx_open_browser":"🌐 Abrir en navegador","ctx_remove":"✕ Eliminar",
+        "ctx_move_up":"Mover arriba","ctx_move_down":"Mover abajo",
+        "ctx_open_browser":"Abrir en navegador","ctx_remove":"Eliminar",
         "about_title":"Acerca de","about_text":"Audio Downloader \n\nHecho por Maken\nLicencia MIT · Eres libre de usarlo, modificarlo y redistribuirlo como quieras.\n\nMotor: yt-dlp  |  UI: Python/Tkinter",
-        "btn_about":"ℹ Acerca de",
-        "tab_search":"  🔍 Buscar  ",
+        "btn_about":"Acerca de",
+        "tab_convert":"  Convertir  ",
+        "tab_video":"  Vídeo  ",
+        "tab_lyrics":"  Letras  ",
+        "convert_src":"Archivo origen:","convert_open":"Abrir","convert_fmt":"Formato destino:",
+        "convert_btn":"Convertir","convert_done":"✅ Convertido: {path}","convert_err":"❌ Error: {err}",
+        "convert_no_file":"Selecciona un archivo primero.","convert_no_ffmpeg":"FFmpeg no encontrado.",
+        "video_url_lbl":"URL de YouTube (vídeo):","video_quality":"Calidad:","video_btn":"Descargar Vídeo",
+        "video_done":"✅ Vídeo guardado en: {folder}","video_subs":"Subtítulos (si disponibles)",
+        "lyrics_query":"Artista — Canción:","lyrics_btn":"Buscar letra","lyrics_searching":"Buscando…",
+        "lyrics_save":"Guardar .lrc","lyrics_saved":"✅ .lrc guardado: {path}",
+        "lyrics_not_found":"No se encontraron letras sincronizadas.",
+        "preview_btn":"▶ Preview 30s","preview_stop":"⏹ Parar preview","preview_loading":"Cargando preview…",
+        "auto_organize":"Auto-organizar por artista/álbum",
+        "tab_search":"  Buscar  ",
         "search_placeholder":"Buscar canción, artista o álbum…",
-        "btn_search":"🔍 Buscar","search_results":"Resultados",
-        "btn_add_result":"＋ Añadir a cola","no_results":"Sin resultados.",
+        "btn_search":"Buscar","search_results":"Resultados",
+        "btn_add_result":"Añadir a cola","no_results":"Sin resultados.",
         "searching":"Buscando…",
-        "tab_charts":"  📊 Gráficas  ",
+        "tab_charts":"  Gráficas  ",
         "chart_monthly":"Descargas por mes","chart_formats":"Formatos",
         "no_data_chart":"Sin datos aún. Descarga algo primero.",
         "schedule_lbl":"⏰ Programar inicio de cola:",
         "schedule_hint":"Formato HH:MM  (vacío = ahora)","schedule_set":"⏰ Programado para {t}",
         "schedule_cancel":"Cancelar programación","schedule_cancelled":"Programación cancelada.",
-        "tab_metadata":"  🏷 Metadatos  ",
+        "tab_metadata":"  Metadatos  ",
         "meta_pick":"Selecciona un MP3 del historial o…",
-        "meta_open":"📂 Abrir MP3","meta_title":"Título","meta_artist":"Artista",
+        "meta_open":"Abrir MP3","meta_title":"Título","meta_artist":"Artista",
         "meta_album":"Álbum","meta_year":"Año","meta_genre":"Género",
-        "meta_save":"💾 Guardar metadatos","meta_saved":"✅ Metadatos guardados.",
+        "meta_save":"Guardar metadatos","meta_saved":"✅ Metadatos guardados.",
         "meta_error":"❌ Error: {err}","meta_no_mutagen":"Instala mutagen:\npip install mutagen",
         "meta_no_file":"Selecciona un archivo MP3 primero.",
     },
     "en": {
         "app_title":"Audio Downloader",
-        "tab_download":"  ⬇ Download  ","tab_history":"  📋 History  ",
-        "tab_settings":"  ⚙ Settings  ",
+        "tab_download":"  Download  ","tab_history":"  History  ",
+        "tab_settings":"  Settings  ",
         "url_label":"URL  (one per line — drag from browser or paste here)",
-        "btn_info":"✦ Get Info","btn_add":"＋ Add to queue","btn_clear_url":"🗑 Clear",
-        "folder_lbl":"📁 Folder:","btn_change":"Change","btn_open_folder":"📂 Open folder",
+        "btn_info":"Get Info","btn_add":"Add to queue","btn_clear_url":"Clear",
+        "folder_lbl":"Folder:","btn_change":"Change","btn_open_folder":"Open folder",
         "fmt_lbl":"Format:","quality_lbl":"Quality:","template_lbl":"Filename template:",
-        "queue_lbl":"Download queue","btn_remove":"✕ Remove",
-        "btn_clear_q":"🗑 Clear queue","in_queue":"{n} in queue",
-        "btn_cancel":"⏹ Cancel","btn_download":"⬇  DOWNLOAD QUEUE",
+        "queue_lbl":"Download queue","btn_remove":"Remove",
+        "btn_clear_q":"Clear queue","in_queue":"{n} in queue",
+        "btn_cancel":"Cancel","btn_download":"DOWNLOAD QUEUE",
         "downloading":"Downloading…","log_lbl":"Log",
         "status_paste":"Paste URLs or drag them from your browser",
         "status_fetching":"Fetching info…","status_info_ok":"Info loaded.",
@@ -225,8 +248,8 @@ STRINGS = {
         "status_cancelled":"⏹ Cancelled.","status_eta":"[{i}/{t}] {pct:.1f}%  {speed}  ETA {eta}",
         "warn_empty_queue":"Add at least one URL.","warn_empty_q_title":"Empty queue",
         "notif_title":"Audio Downloader — Done!","notif_msg":"{n} {fmt} file(s) downloaded.",
-        "hist_search":"Search…","btn_clear_hist":"🗑 Clear history",
-        "btn_export_csv":"📥 Export CSV","hist_entries":"{n} entries",
+        "hist_search":"Search…","btn_clear_hist":"Clear history",
+        "btn_export_csv":"Export CSV","hist_entries":"{n} entries",
         "col_title":"Title","col_channel":"Channel","col_fmt":"Fmt",
         "col_dur":"Dur.","col_date":"Date","col_folder":"Folder",
         "dblclick_hint":"Double click → open folder  |  Select + ▶ to preview",
@@ -240,31 +263,44 @@ STRINGS = {
         "concurrent_lbl":"Parallel:","retries_lbl":"Auto-retries:",
         "theme_lbl":"Theme:","theme_dark":"Dark","theme_light":"Light",
         "accent_lbl":"Accent color:","btn_pick_accent":"🎨 Pick color",
-        "btn_save_settings":"💾 Save settings","settings_saved":"✅ Saved.",
-        "btn_update_ytdlp":"🔄 Update yt-dlp","updating":"Updating…",
+        "btn_save_settings":"Save settings","settings_saved":"✅ Saved.",
+        "btn_update_ytdlp":"Update yt-dlp","updating":"Updating…",
         "update_ok":"✅ yt-dlp updated.","update_fail":"❌ Error: {err}",
         "no_audio_file":"File not found. Has it been downloaded?",
         "pygame_missing":"Install pygame:\npip install pygame",
-        "ctx_move_up":"⬆ Move up","ctx_move_down":"⬇ Move down",
-        "ctx_open_browser":"🌐 Open in browser","ctx_remove":"✕ Remove",
+        "ctx_move_up":"Move up","ctx_move_down":"Move down",
+        "ctx_open_browser":"Open in browser","ctx_remove":"Remove",
         "about_title":"About","about_text":"Audio Downloader \n\nMade by Maken\nMIT License · You are free to use, modify, and redistribute it as you wish.\n\nEngine: yt-dlp  |  UI: Python/Tkinter",
-        "btn_about":"ℹ About",
-        "tab_search":"  🔍 Search  ",
+        "btn_about":"About",
+        "tab_convert":"  Convert  ",
+        "tab_video":"  Video  ",
+        "tab_lyrics":"  Lyrics  ",
+        "convert_src":"Source file:","convert_open":"Open","convert_fmt":"Target format:",
+        "convert_btn":"Convert","convert_done":"✅ Converted: {path}","convert_err":"❌ Error: {err}",
+        "convert_no_file":"Select a file first.","convert_no_ffmpeg":"FFmpeg not found.",
+        "video_url_lbl":"YouTube URL (video):","video_quality":"Quality:","video_btn":"Download Video",
+        "video_done":"✅ Video saved to: {folder}","video_subs":"Subtitles (if available)",
+        "lyrics_query":"Artist — Song:","lyrics_btn":"Search lyrics","lyrics_searching":"Searching…",
+        "lyrics_save":"Save .lrc","lyrics_saved":"✅ .lrc saved: {path}",
+        "lyrics_not_found":"No synced lyrics found.",
+        "preview_btn":"▶ Preview 30s","preview_stop":"⏹ Stop preview","preview_loading":"Loading preview…",
+        "auto_organize":"Auto-organize by artist/album",
+        "tab_search":"  Search  ",
         "search_placeholder":"Search song, artist or album…",
-        "btn_search":"🔍 Search","search_results":"Results",
-        "btn_add_result":"＋ Add to queue","no_results":"No results.",
+        "btn_search":"Search","search_results":"Results",
+        "btn_add_result":"Add to queue","no_results":"No results.",
         "searching":"Searching…",
-        "tab_charts":"  📊 Charts  ",
+        "tab_charts":"  Charts  ",
         "chart_monthly":"Downloads per month","chart_formats":"Formats",
         "no_data_chart":"No data yet. Download something first.",
         "schedule_lbl":"⏰ Schedule queue start:",
         "schedule_hint":"Format HH:MM  (empty = now)","schedule_set":"⏰ Scheduled for {t}",
         "schedule_cancel":"Cancel schedule","schedule_cancelled":"Schedule cancelled.",
-        "tab_metadata":"  🏷 Metadata  ",
+        "tab_metadata":"  Metadata  ",
         "meta_pick":"Select an MP3 from history or…",
-        "meta_open":"📂 Open MP3","meta_title":"Title","meta_artist":"Artist",
+        "meta_open":"Open MP3","meta_title":"Title","meta_artist":"Artist",
         "meta_album":"Album","meta_year":"Year","meta_genre":"Genre",
-        "meta_save":"💾 Save metadata","meta_saved":"✅ Metadata saved.",
+        "meta_save":"Save metadata","meta_saved":"✅ Metadata saved.",
         "meta_error":"❌ Error: {err}","meta_no_mutagen":"Install mutagen:\npip install mutagen",
         "meta_no_file":"Select an MP3 file first.",
     },
@@ -360,31 +396,29 @@ class App(_Base):
         C = self.C
         self.configure(bg=C["BG"])
         s = ttk.Style(); s.theme_use("default")
-        s.configure("TNotebook",     background=C["BG"],    borderwidth=0)
-        s.configure("TNotebook.Tab", background=C["PANEL"], foreground=C["SUBTEXT"],
-                    padding=[14,6],  font=("Segoe UI",10))
-        s.map("TNotebook.Tab", background=[("selected",C["ACCENT2"])],
-                               foreground=[("selected",C["TEXT"])])
-        s.configure("TProgressbar", troughcolor=C["PANEL"], background=C["ACCENT"], thickness=8)
+        s.configure("TProgressbar", troughcolor=C["BORDER"], background=C["ACCENT"], thickness=6)
         s.configure("Hist.Treeview", background=C["HIST_BG"], foreground=C["TEXT"],
-                    rowheight=26, fieldbackground=C["HIST_BG"], borderwidth=0, font=("Segoe UI",9))
+                    rowheight=28, fieldbackground=C["HIST_BG"], borderwidth=0, font=("Segoe UI",9))
         s.configure("Hist.Treeview.Heading", background=C["PANEL"], foreground=C["SUBTEXT"],
                     font=("Segoe UI",9,"bold"), relief="flat")
-        s.map("Hist.Treeview", background=[("selected",C["ACCENT2"])])
+        s.map("Hist.Treeview", background=[("selected",C["ACCENT_SOFT"])],
+                               foreground=[("selected",C["TEXT"])])
 
     def _reload_theme(self):
         self.C = self._build_theme()
         self._apply_styles()
-        # Cancelar trace activo antes de destruir widgets
         try:
             for name, _, cb in self.search_var.trace_info():
                 self.search_var.trace_remove(name, cb)
         except Exception:
             pass
         for w in self.winfo_children(): w.destroy()
+        self._sidebar_btns = {}
+        self._content_frames = {}
         self._build_ui()
         self._refresh_history()
         self._refresh_stats()
+        self._refresh_charts()
 
     # ── i18n ─────────────────────────────────────────────────────────────────
     def T(self, k, **kw):
@@ -392,72 +426,222 @@ class App(_Base):
         return s.format(**kw) if kw else s
 
     # ════════════════════════════════════════════════════════════════════════
-    # BUILD UI
+    # BUILD UI — Sidebar layout
     # ════════════════════════════════════════════════════════════════════════
     def _build_ui(self):
         C = self.C
         self.title(self.T("app_title"))
+        self._active_section = "download"
 
-        # ── Header ───────────────────────────────────────────────────────────
-        hdr = tk.Frame(self, bg=C["ACCENT2"], height=56)
-        hdr.pack(fill="x"); hdr.pack_propagate(False)
+        # ── Root layout: sidebar + main ──────────────────────────────────────
+        root_frame = tk.Frame(self, bg=C["BG"])
+        root_frame.pack(fill="both", expand=True)
 
-        tk.Label(hdr, text="⬇ Audio Downloader",
-                 font=("Segoe UI",16,"bold"), bg=C["ACCENT2"], fg=C["TEXT"]).pack(side="left",padx=20)
+        # ── SIDEBAR ──────────────────────────────────────────────────────────
+        sidebar = tk.Frame(root_frame, bg=C["SIDEBAR"], width=200)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        # Botón Acerca de
-        tk.Button(hdr, text=self.T("btn_about"), font=("Segoe UI",9),
-                  bg=C["ACCENT2"], fg=C["SUBTEXT"], relief="flat", cursor="hand2",
-                  activebackground=C["ACCENT"], activeforeground=C["TEXT"],
-                  command=self._show_about).pack(side="right", padx=6)
+        # Logo
+        logo_frame = tk.Frame(sidebar, bg=C["SIDEBAR"])
+        logo_frame.pack(fill="x", pady=(16,8), padx=12)
+        logo_icon = tk.Frame(logo_frame, bg=C["ACCENT"], width=34, height=34)
+        logo_icon.pack(side="left"); logo_icon.pack_propagate(False)
+        tk.Label(logo_icon, text="♪", font=("Segoe UI",16,"bold"),
+                 bg=C["ACCENT"], fg="white").place(relx=0.5, rely=0.5, anchor="center")
+        logo_txt = tk.Frame(logo_frame, bg=C["SIDEBAR"])
+        logo_txt.pack(side="left", padx=(8,0))
+        tk.Label(logo_txt, text="Downloader", font=("Segoe UI",13,"bold"),
+                 bg=C["SIDEBAR"], fg=C["TEXT"]).pack(anchor="w")
+        tk.Label(logo_txt, text="Audio Downloader", font=("Segoe UI",8),
+                 bg=C["SIDEBAR"], fg=C["MUTED"]).pack(anchor="w")
 
-        # Botón Abrir carpeta (header)
-        self.btn_open_folder_hdr = tk.Button(
-            hdr, text=self.T("btn_open_folder"), font=("Segoe UI",9),
-            bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
-            activebackground=C["ACCENT"], activeforeground=C["TEXT"], padx=10,
-            command=lambda: open_folder(self.output_dir))
-        self.btn_open_folder_hdr.pack(side="right", padx=2)
+        # Separador
+        tk.Frame(sidebar, bg=C["BORDER"], height=1).pack(fill="x", padx=12, pady=(0,8))
 
-        # Idioma
-        lang_f = tk.Frame(hdr, bg=C["ACCENT2"]); lang_f.pack(side="right", padx=14)
-        tk.Label(lang_f, text=self.T("lang_lbl"), font=("Segoe UI",9),
-                 bg=C["ACCENT2"], fg=C["SUBTEXT"]).pack(side="left")
+        # ── Secciones del sidebar ──────────────────────────────────────────
+        self._sidebar_btns = {}
+        self._content_frames = {}
+
+        SIDEBAR_ITEMS = [
+            ("download",  "⬇", self.T("tab_download").strip()),
+            ("search",    "🔍", self.T("tab_search").strip()),
+            ("history",   "📋", self.T("tab_history").strip()),
+            ("favorites", "⭐", "Favoritos"),
+            ("convert",   "🔄", self.T("tab_convert").strip()),
+            ("video",     "🎬", self.T("tab_video").strip()),
+            ("charts",    "📊", self.T("tab_charts").strip()),
+            ("lyrics",    "🎵", self.T("tab_lyrics").strip()),
+            ("metadata",  "🏷", self.T("tab_metadata").strip()),
+        ]
+
+        nav_frame = tk.Frame(sidebar, bg=C["SIDEBAR"])
+        nav_frame.pack(fill="both", expand=True, padx=8)
+
+        for key, icon, label in SIDEBAR_ITEMS:
+            self._make_sidebar_btn(nav_frame, key, icon, label)
+
+        # Separador + Ajustes al final
+        tk.Frame(sidebar, bg=C["BORDER"], height=1).pack(fill="x", padx=12, pady=4)
+        settings_frame = tk.Frame(sidebar, bg=C["SIDEBAR"])
+        settings_frame.pack(fill="x", padx=8, pady=(0,4))
+        self._make_sidebar_btn(settings_frame, "settings", "⚙", self.T("tab_settings").strip())
+
+        # Idioma + versión
+        bottom = tk.Frame(sidebar, bg=C["SIDEBAR"])
+        bottom.pack(fill="x", padx=12, pady=(4,12))
+        tk.Frame(bottom, bg=C["BORDER"], height=1).pack(fill="x", pady=(0,8))
+        lang_row = tk.Frame(bottom, bg=C["SIDEBAR"]); lang_row.pack(fill="x")
+        tk.Label(lang_row, text=self.T("lang_lbl"), font=("Segoe UI",9),
+                 bg=C["SIDEBAR"], fg=C["MUTED"]).pack(side="left")
         self.lang_var = tk.StringVar(value=self.lang.upper())
-        lang_cb = ttk.Combobox(lang_f, textvariable=self.lang_var, values=["ES","EN"],
+        lang_cb = ttk.Combobox(lang_row, textvariable=self.lang_var, values=["ES","EN"],
                                state="readonly", width=4, font=("Segoe UI",9))
         lang_cb.pack(side="left", padx=(4,0))
         lang_cb.bind("<<ComboboxSelected>>", self._change_lang)
+        tk.Label(bottom, text="v3.0 · by Maken", font=("Segoe UI",8),
+                 bg=C["SIDEBAR"], fg=C["MUTED"]).pack(anchor="w", pady=(6,0))
 
-        # Sub-header
-        sub = tk.Frame(self, bg=C["PANEL2"]); sub.pack(fill="x")
-        tk.Label(sub, text=f"🌐  {PLATFORMS}", font=("Segoe UI",8),
-                 bg=C["PANEL2"], fg=C["SUBTEXT"]).pack(side="left", pady=3, padx=12)
+        # ── MAIN PANEL ───────────────────────────────────────────────────────
+        main_frame = tk.Frame(root_frame, bg=C["BG"])
+        main_frame.pack(side="left", fill="both", expand=True)
 
-        # Notebook
-        self.nb = ttk.Notebook(self); self.nb.pack(fill="both", expand=True)
-        self.tab_dl   = tk.Frame(self.nb, bg=C["BG"])
-        self.tab_hist = tk.Frame(self.nb, bg=C["BG"])
-        self.tab_cfg  = tk.Frame(self.nb, bg=C["BG"])
-        self.nb.add(self.tab_dl,   text=self.T("tab_download"))
-        self.nb.add(self.tab_hist, text=self.T("tab_history"))
-        self.nb.add(self.tab_cfg,  text=self.T("tab_settings"))
-        # Tabs adicionales
-        self.tab_search = tk.Frame(self.nb, bg=C["BG"])
-        self.tab_charts = tk.Frame(self.nb, bg=C["BG"])
-        self.tab_meta   = tk.Frame(self.nb, bg=C["BG"])
-        self.tab_favs   = tk.Frame(self.nb, bg=C["BG"])
-        self.nb.add(self.tab_search, text=self.T("tab_search"))
-        self.nb.add(self.tab_charts, text=self.T("tab_charts"))
-        self.nb.add(self.tab_meta,   text=self.T("tab_metadata"))
-        self.nb.add(self.tab_favs,   text="  ⭐ Favoritos  ")
-        self._build_tab_download(self.tab_dl)
-        self._build_tab_history(self.tab_hist)
-        self._build_tab_settings(self.tab_cfg)
-        self._build_tab_search(self.tab_search)
-        self._build_tab_charts(self.tab_charts)
-        self._build_tab_metadata(self.tab_meta)
-        self._build_tab_favorites(self.tab_favs)
+        # Topbar
+        self.topbar = tk.Frame(main_frame, bg=C["PANEL"], height=52)
+        self.topbar.pack(fill="x"); self.topbar.pack_propagate(False)
+        tk.Frame(self.topbar, bg=C["BORDER"], height=1).pack(side="bottom", fill="x")
+
+        self.lbl_topbar_title = tk.Label(
+            self.topbar, text="", font=("Segoe UI",14,"bold"),
+            bg=C["PANEL"], fg=C["TEXT"])
+        self.lbl_topbar_title.pack(side="left", padx=20)
+
+        self.lbl_topbar_sub = tk.Label(
+            self.topbar, text="", font=("Segoe UI",9),
+            bg=C["PANEL"], fg=C["MUTED"])
+        self.lbl_topbar_sub.pack(side="left", padx=(0,0))
+
+        # Botones topbar derecha
+        topbar_right = tk.Frame(self.topbar, bg=C["PANEL"])
+        topbar_right.pack(side="right", padx=16)
+        self._btn_open_folder = self._make_topbar_btn(
+            topbar_right, "📂 " + self.T("btn_open_folder"),
+            lambda: open_folder(self.output_dir))
+        self._btn_open_folder.pack(side="right", padx=(4,0))
+        self._btn_about = self._make_topbar_btn(
+            topbar_right, self.T("btn_about"), self._show_about)
+        self._btn_about.pack(side="right", padx=(4,0))
+
+        # Content area (stack de frames)
+        content_area = tk.Frame(main_frame, bg=C["BG"])
+        content_area.pack(fill="both", expand=True)
+
+        # Crear todos los frames de contenido
+        sections = [
+            ("download",  self._build_tab_download),
+            ("search",    self._build_tab_search),
+            ("history",   self._build_tab_history),
+            ("favorites", self._build_tab_favorites),
+            ("convert",   self._build_tab_convert),
+            ("video",     self._build_tab_video),
+            ("charts",    self._build_tab_charts),
+            ("lyrics",    self._build_tab_lyrics),
+            ("metadata",  self._build_tab_metadata),
+            ("settings",  self._build_tab_settings),
+        ]
+        for key, builder in sections:
+            frame = tk.Frame(content_area, bg=C["BG"])
+            frame.place(relwidth=1, relheight=1)
+            builder(frame)
+            self._content_frames[key] = frame
+
+        # Mostrar sección inicial
+        self._switch_section("download")
+
+    def _make_sidebar_btn(self, parent, key, icon, label):
+        C = self.C
+        is_active = (key == self._active_section)
+        bg  = C["SIDEBAR_ACTIVE"] if is_active else C["SIDEBAR"]
+        fg  = C["TEXT"]           if is_active else C["SUBTEXT"]
+        acc = C["ACCENT"]         if is_active else C["SIDEBAR"]
+
+        btn_frame = tk.Frame(parent, bg=bg, cursor="hand2")
+        btn_frame.pack(fill="x", pady=1)
+
+        # Barra lateral izquierda (indicador activo)
+        indicator = tk.Frame(btn_frame, bg=acc, width=3)
+        indicator.pack(side="left", fill="y")
+
+        inner = tk.Frame(btn_frame, bg=bg)
+        inner.pack(side="left", fill="x", expand=True, padx=(10,8), pady=7)
+
+        tk.Label(inner, text=f"{icon}  {label}", font=("Segoe UI",10),
+                 bg=bg, fg=fg, anchor="w").pack(side="left")
+
+        def on_click(_=None): self._switch_section(key)
+        def on_enter(_=None):
+            if key != self._active_section:
+                btn_frame.configure(bg=C["PANEL2"])
+                inner.configure(bg=C["PANEL2"])
+                for w in inner.winfo_children(): w.configure(bg=C["PANEL2"])
+        def on_leave(_=None):
+            if key != self._active_section:
+                btn_frame.configure(bg=C["SIDEBAR"])
+                inner.configure(bg=C["SIDEBAR"])
+                for w in inner.winfo_children(): w.configure(bg=C["SIDEBAR"])
+
+        for widget in [btn_frame, inner] + list(inner.winfo_children()):
+            widget.bind("<Button-1>", on_click)
+            widget.bind("<Enter>",    on_enter)
+            widget.bind("<Leave>",    on_leave)
+
+        self._sidebar_btns[key] = (btn_frame, inner, indicator)
+
+    def _make_topbar_btn(self, parent, text, command):
+        C = self.C
+        btn = tk.Button(parent, text=text, font=("Segoe UI",9),
+                        bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                        activebackground=C["BORDER"], activeforeground=C["TEXT"],
+                        padx=10, pady=5, bd=0, command=command)
+        return btn
+
+    def _switch_section(self, key):
+        C = self.C
+        TOPBAR = {
+            "download":  ("⬇  " + self.T("tab_download").strip(),  "YouTube · SoundCloud · Vimeo · Bandcamp · +1000"),
+            "search":    ("🔍  " + self.T("tab_search").strip(),    "Busca canciones sin salir de la app"),
+            "history":   ("📋  " + self.T("tab_history").strip(),   "Tus descargas anteriores"),
+            "favorites": ("⭐  Favoritos",                           "URLs y playlists guardadas"),
+            "convert":   ("🔄  " + self.T("tab_convert").strip(),   "Convierte archivos de audio locales"),
+            "video":     ("🎬  " + self.T("tab_video").strip(),     "Descarga vídeos en MP4"),
+            "charts":    ("📊  " + self.T("tab_charts").strip(),    "Estadísticas de tus descargas"),
+            "lyrics":    ("🎵  " + self.T("tab_lyrics").strip(),    "Letras sincronizadas (.lrc)"),
+            "metadata":  ("🏷   " + self.T("tab_metadata").strip(), "Edita etiquetas ID3 de tus MP3"),
+            "settings":  ("⚙   " + self.T("tab_settings").strip(), "Configuración de la aplicación"),
+        }
+        # Desactivar anterior
+        prev = self._active_section
+        if prev in self._sidebar_btns:
+            bf, inner, ind = self._sidebar_btns[prev]
+            bf.configure(bg=C["SIDEBAR"])
+            inner.configure(bg=C["SIDEBAR"])
+            ind.configure(bg=C["SIDEBAR"])
+            for w in inner.winfo_children(): w.configure(bg=C["SIDEBAR"], fg=C["SUBTEXT"])
+        # Activar nuevo
+        self._active_section = key
+        if key in self._sidebar_btns:
+            bf, inner, ind = self._sidebar_btns[key]
+            bf.configure(bg=C["SIDEBAR_ACTIVE"])
+            inner.configure(bg=C["SIDEBAR_ACTIVE"])
+            ind.configure(bg=C["ACCENT"])
+            for w in inner.winfo_children(): w.configure(bg=C["SIDEBAR_ACTIVE"], fg=C["TEXT"])
+        # Actualizar topbar
+        title, sub = TOPBAR.get(key, (key, ""))
+        self.lbl_topbar_title.configure(text=title)
+        self.lbl_topbar_sub.configure(text=f"  {sub}")
+        # Mostrar frame correcto
+        for k, frame in self._content_frames.items():
+            frame.lift() if k == key else frame.lower()
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB DESCARGAR
@@ -585,6 +769,15 @@ class App(_Base):
         tk.Label(cr3, text="  %(artist)s · %(playlist_index)s · %(uploader)s",
                  font=("Segoe UI",7), bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=4)
 
+        # Auto-organizar
+        self.auto_organize_var = tk.BooleanVar(value=self.cfg.get("auto_organize", False))
+        tk.Checkbutton(p, text=self.T("auto_organize"), variable=self.auto_organize_var,
+                       font=("Segoe UI",9), bg=C["BG"], fg=C["SUBTEXT"],
+                       selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                       activeforeground=C["TEXT"],
+                       command=lambda: self.cfg.update({"auto_organize": self.auto_organize_var.get()}) or save_config(self.cfg)
+                       ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(4,0))
+
         # Cola
         self.lbl_queue_title = tk.Label(p, text=self.T("queue_lbl"), font=("Segoe UI",9,"bold"),
                                          bg=C["BG"], fg=C["SUBTEXT"])
@@ -693,7 +886,7 @@ class App(_Base):
         self.search_entry.bind("<FocusIn>",  self._search_focus_in)
         self.search_entry.bind("<FocusOut>", self._search_focus_out)
         self.search_entry.pack(side="left", fill="x", expand=True, ipady=4)
-        tk.Button(sr, text="📋 M3U", font=("Segoe UI",9),
+        tk.Button(sr, text="M3U", font=("Segoe UI",9),
                   bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
                   padx=8, pady=3, command=lambda: self._export_m3u(auto=False)).pack(side="right", padx=(5,0))
         self.btn_export = tk.Button(sr, text=self.T("btn_export_csv"), font=("Segoe UI",9),
@@ -973,7 +1166,7 @@ class App(_Base):
         fe.bind("<FocusIn>", lambda e: (fe.delete(0,"end"), fe.configure(fg=C["TEXT"]))
                               if "Pega" in fe.get() else None)
         fe.grid(row=0, column=0, sticky="ew", ipady=4, padx=(0,8))
-        tk.Button(top, text="⭐ Guardar", font=("Segoe UI",9,"bold"),
+        tk.Button(top, text="Guardar", font=("Segoe UI",9,"bold"),
                   bg=C["ACCENT"], fg=C["TEXT"], relief="flat", cursor="hand2",
                   padx=10, pady=4, command=self._fav_add).grid(row=0, column=1)
 
@@ -990,10 +1183,10 @@ class App(_Base):
         self._fav_refresh()
 
         bf = tk.Frame(p, bg=C["BG"]); bf.grid(row=2, column=0, sticky="ew", pady=(6,0))
-        tk.Button(bf, text="⬇ Añadir a cola", font=("Segoe UI",9,"bold"),
+        tk.Button(bf, text="Añadir a cola", font=("Segoe UI",9,"bold"),
                   bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
                   padx=12, pady=5, command=self._fav_send_to_queue).pack(side="left")
-        tk.Button(bf, text="✕ Eliminar", font=("Segoe UI",9),
+        tk.Button(bf, text="Eliminar", font=("Segoe UI",9),
                   bg=C["PANEL"], fg=C["SUBTEXT"], relief="flat", cursor="hand2",
                   padx=10, pady=5, command=self._fav_remove).pack(side="left", padx=(6,0))
         tk.Label(bf, text="Doble click → añadir a cola directamente",
@@ -1035,6 +1228,369 @@ class App(_Base):
             self._set_status(self.T("status_added",n=1), self.C["SUCCESS"])
             self.nb.select(0)
 
+
+    # ════════════════════════════════════════════════════════════════════════
+    # PREVIEW 30s
+    # ════════════════════════════════════════════════════════════════════════
+    def _preview_selected(self):
+        if not HAS_PYGAME:
+            messagebox.showinfo("pygame", self.T("pygame_missing")); return
+        sel = self.search_tree.focus()
+        if not sel: return
+        idx = list(self.search_tree.get_children()).index(sel)
+        if idx >= len(self._search_results_urls): return
+        url = self._search_results_urls[idx]
+        self.lbl_preview_status.configure(text=self.T("preview_loading"), fg=self.C["SUBTEXT"])
+        self.btn_preview.configure(state="disabled")
+        threading.Thread(target=self._preview_worker, args=(url,), daemon=True).start()
+
+    def _preview_worker(self, url):
+        import tempfile
+        try:
+            tmpdir  = tempfile.gettempdir()
+            tmpbase = os.path.join(tmpdir, "preview")
+            for fn in os.listdir(tmpdir):
+                if fn.startswith("preview"):
+                    try: os.remove(os.path.join(tmpdir,fn))
+                    except Exception: pass
+            opts = {
+                "format":"bestaudio/best","outtmpl": tmpbase+".%(ext)s",
+                "quiet":True,"no_warnings":True,
+                "postprocessors":[{"key":"FFmpegExtractAudio",
+                                   "preferredcodec":"mp3","preferredquality":"128"}],
+                "postprocessor_args":["-t","35"],
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl: ydl.download([url])
+            found = next((os.path.join(tmpdir,f) for f in os.listdir(tmpdir)
+                         if f.startswith("preview") and f.endswith(".mp3")), None)
+            if not found:
+                self.after(0, lambda: self.lbl_preview_status.configure(
+                    text="No se pudo cargar", fg=self.C["ERROR"])); return
+            self._preview_tmpfile = found
+            pygame.mixer.music.load(found)
+            pygame.mixer.music.play()
+            self.after(0, lambda: (
+                self.lbl_preview_status.configure(text="▶ Reproduciendo preview…", fg=self.C["SUCCESS"]),
+                self.btn_preview_stop.configure(state="normal"),
+                self.btn_preview.configure(state="normal"),
+            ))
+        except Exception as e:
+            self.after(0, lambda err=str(e)[:50]: (
+                self.lbl_preview_status.configure(text=f"Error: {err}", fg=self.C["ERROR"]),
+                self.btn_preview.configure(state="normal"),
+            ))
+
+    def _preview_stop(self):
+        if HAS_PYGAME:
+            try: pygame.mixer.music.stop()
+            except Exception: pass
+        self.lbl_preview_status.configure(text="")
+        self.btn_preview_stop.configure(state="disabled")
+        if self._preview_tmpfile and os.path.exists(self._preview_tmpfile):
+            try: os.remove(self._preview_tmpfile)
+            except Exception: pass
+            self._preview_tmpfile = None
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB CONVERTIDOR LOCAL
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_convert(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=28, pady=20)
+        p.pack(fill="both", expand=True); p.columnconfigure(1, weight=1)
+
+        tk.Label(p, text=self.T("convert_src"), font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=0, column=0, sticky="w", pady=8, padx=(0,16))
+        src_f = tk.Frame(p, bg=C["BG"]); src_f.grid(row=0, column=1, sticky="ew", pady=8)
+        src_f.columnconfigure(0, weight=1)
+        self.convert_src_var = tk.StringVar()
+        tk.Entry(src_f, textvariable=self.convert_src_var, font=("Segoe UI",9),
+                  bg=C["PANEL"], fg=C["TEXT"], insertbackground=C["TEXT"],
+                  relief="flat", bd=6).grid(row=0, column=0, sticky="ew", ipady=4)
+        tk.Button(src_f, text=self.T("convert_open"), font=("Segoe UI",9),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=8, pady=4, command=self._convert_pick_file).grid(row=0, column=1, padx=(8,0))
+
+        tk.Label(p, text=self.T("convert_fmt"), font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=1, column=0, sticky="w", pady=8, padx=(0,16))
+        fmt_f = tk.Frame(p, bg=C["BG"]); fmt_f.grid(row=1, column=1, sticky="w", pady=8)
+        self.convert_fmt_var = tk.StringVar(value="MP3")
+        for fmt in ["MP3","AAC","FLAC","WAV","OGG"]:
+            tk.Radiobutton(fmt_f, text=fmt, variable=self.convert_fmt_var, value=fmt,
+                           font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                           selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                           activeforeground=C["TEXT"]).pack(side="left", padx=6)
+
+        tk.Label(p, text=self.T("quality_lbl"), font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=2, column=0, sticky="w", pady=8, padx=(0,16))
+        qual_f = tk.Frame(p, bg=C["BG"]); qual_f.grid(row=2, column=1, sticky="w", pady=8)
+        self.convert_qual_var = tk.StringVar(value="320")
+        for q in ["128","192","256","320"]:
+            tk.Radiobutton(qual_f, text=f"{q}k", variable=self.convert_qual_var, value=q,
+                           font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                           selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                           activeforeground=C["TEXT"]).pack(side="left", padx=6)
+
+        tk.Frame(p, bg=C["PANEL"], height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12,14))
+        btn_f = tk.Frame(p, bg=C["BG"]); btn_f.grid(row=4, column=0, columnspan=2, sticky="w")
+        tk.Button(btn_f, text=self.T("convert_btn"), font=("Segoe UI",12,"bold"),
+                  bg=C["ACCENT"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=20, pady=10, activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
+                  command=self._convert_file).pack(side="left")
+        self.lbl_convert_status = tk.Label(btn_f, text="", font=("Segoe UI",9),
+                                            bg=C["BG"], fg=C["SUCCESS"])
+        self.lbl_convert_status.pack(side="left", padx=14)
+        self.convert_progress = ttk.Progressbar(p, maximum=100, mode="indeterminate")
+        self.convert_progress.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(12,0))
+        tk.Label(p, text="El archivo convertido se guarda en la misma carpeta que el original.",
+                 font=("Segoe UI",8), bg=C["BG"], fg=C["SUBTEXT"]).grid(
+                 row=6, column=0, columnspan=2, sticky="w", pady=(8,0))
+
+    def _convert_pick_file(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("Audio","*.mp3 *.aac *.flac *.wav *.ogg *.m4a *.opus *.webm"),("All","*.*")],
+            initialdir=self.output_dir)
+        if path: self.convert_src_var.set(path)
+
+    def _convert_file(self):
+        src = self.convert_src_var.get().strip()
+        if not src:
+            self.lbl_convert_status.configure(text=self.T("convert_no_file"), fg=self.C["WARNING"]); return
+        if not os.path.exists(src):
+            self.lbl_convert_status.configure(text="Archivo no encontrado.", fg=self.C["ERROR"]); return
+        self.lbl_convert_status.configure(text="Convirtiendo...", fg=self.C["SUBTEXT"])
+        self.convert_progress.start(10)
+        threading.Thread(target=self._convert_worker,
+                         args=(src, self.convert_fmt_var.get(), self.convert_qual_var.get()),
+                         daemon=True).start()
+
+    def _convert_worker(self, src, fmt, quality):
+        import subprocess
+        codec = FORMATS[fmt]["codec"]
+        ext   = codec.replace("vorbis","ogg")
+        dest  = os.path.splitext(src)[0] + f"_converted.{ext}"
+        try:
+            args = ["ffmpeg","-y","-i",src]
+            if FORMATS[fmt]["lossy"]: args += ["-b:a",f"{quality}k"]
+            args.append(dest)
+            r = subprocess.run(args, capture_output=True, timeout=300)
+            if r.returncode == 0:
+                self.after(0, lambda: (
+                    self.lbl_convert_status.configure(
+                        text=self.T("convert_done",path=os.path.basename(dest)), fg=self.C["SUCCESS"]),
+                    self.convert_progress.stop(),
+                    self.convert_progress.configure(value=100, mode="determinate"),
+                ))
+                self._log(f"🔄 {os.path.basename(src)} → {os.path.basename(dest)}")
+            else:
+                err = (r.stderr.decode("utf-8","ignore").splitlines()[-1][:60]
+                       if r.stderr else "error desconocido")
+                self.after(0, lambda e=err: (
+                    self.lbl_convert_status.configure(text=self.T("convert_err",err=e), fg=self.C["ERROR"]),
+                    self.convert_progress.stop(),
+                ))
+        except FileNotFoundError:
+            self.after(0, lambda: (
+                self.lbl_convert_status.configure(text=self.T("convert_no_ffmpeg"), fg=self.C["ERROR"]),
+                self.convert_progress.stop(),
+            ))
+        except Exception as e:
+            self.after(0, lambda err=str(e)[:60]: (
+                self.lbl_convert_status.configure(text=self.T("convert_err",err=err), fg=self.C["ERROR"]),
+                self.convert_progress.stop(),
+            ))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB VÍDEO
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_video(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=28, pady=20)
+        p.pack(fill="both", expand=True); p.columnconfigure(1, weight=1)
+
+        tk.Label(p, text=self.T("video_url_lbl"), font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=0, column=0, sticky="w", pady=8, padx=(0,16))
+        self.video_url_var = tk.StringVar()
+        tk.Entry(p, textvariable=self.video_url_var, font=("Segoe UI",10),
+                  bg=C["PANEL"], fg=C["TEXT"], insertbackground=C["TEXT"],
+                  relief="flat", bd=8).grid(row=0, column=1, sticky="ew", pady=8, ipady=5)
+
+        tk.Label(p, text=self.T("video_quality"), font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=1, column=0, sticky="w", pady=8, padx=(0,16))
+        qual_f = tk.Frame(p, bg=C["BG"]); qual_f.grid(row=1, column=1, sticky="w", pady=8)
+        self.video_qual_var = tk.StringVar(value="1080")
+        for q in ["720","1080","1440","2160"]:
+            tk.Radiobutton(qual_f, text=f"{q}p", variable=self.video_qual_var, value=q,
+                           font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                           selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                           activeforeground=C["TEXT"]).pack(side="left", padx=8)
+
+        self.video_subs_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(p, text=self.T("video_subs"), variable=self.video_subs_var,
+                       font=("Segoe UI",9), bg=C["BG"], fg=C["TEXT"],
+                       selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                       activeforeground=C["TEXT"]).grid(row=2, column=1, sticky="w", pady=4)
+
+        tk.Frame(p, bg=C["PANEL"], height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10,14))
+        btn_f = tk.Frame(p, bg=C["BG"]); btn_f.grid(row=4, column=0, columnspan=2, sticky="w")
+        self.btn_video_dl = tk.Button(btn_f, text=self.T("video_btn"),
+                                       font=("Segoe UI",12,"bold"), bg=C["ACCENT"], fg=C["TEXT"],
+                                       relief="flat", cursor="hand2", padx=20, pady=10,
+                                       activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
+                                       command=self._start_video_download)
+        self.btn_video_dl.pack(side="left")
+        self.lbl_video_status = tk.Label(btn_f, text="", font=("Segoe UI",9),
+                                          bg=C["BG"], fg=C["SUCCESS"])
+        self.lbl_video_status.pack(side="left", padx=14)
+        self.video_progress_var = tk.DoubleVar()
+        ttk.Progressbar(p, variable=self.video_progress_var, maximum=100).grid(
+            row=5, column=0, columnspan=2, sticky="ew", pady=(12,0))
+        tk.Label(p, text="Los vídeos se guardan en la carpeta de descarga configurada.",
+                 font=("Segoe UI",8), bg=C["BG"], fg=C["SUBTEXT"]).grid(
+                 row=6, column=0, columnspan=2, sticky="w", pady=(8,0))
+
+    def _start_video_download(self):
+        url = self.video_url_var.get().strip()
+        if not url: return
+        self.btn_video_dl.configure(state="disabled")
+        self.lbl_video_status.configure(text="Preparando...", fg=self.C["SUBTEXT"])
+        threading.Thread(target=self._video_worker, args=(url,), daemon=True).start()
+
+    def _video_worker(self, url):
+        qual = self.video_qual_var.get()
+        subs = self.video_subs_var.get()
+        def hook(d):
+            if d["status"]=="downloading":
+                try:
+                    pct = float(d.get("_percent_str","0%").strip().replace("%",""))
+                    self.after(0, lambda p=pct: self.video_progress_var.set(p))
+                    self.after(0, lambda p=pct: self.lbl_video_status.configure(
+                        text=f"{p:.1f}%  {d.get('_speed_str','')}  ETA {d.get('_eta_str','—')}",
+                        fg=self.C["TEXT"]))
+                except ValueError: pass
+        opts = {
+            "format": f"bestvideo[height<={qual}]+bestaudio/best[height<={qual}]",
+            "outtmpl": os.path.join(self.output_dir,"%(title)s.%(ext)s"),
+            "quiet":True,"no_warnings":True,"progress_hooks":[hook],
+            "merge_output_format":"mp4",
+        }
+        if subs:
+            opts.update({"writesubtitles":True,"writeautomaticsub":True,"subtitleslangs":["es","en"]})
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl: ydl.download([url])
+            self.after(0, lambda: (
+                self.lbl_video_status.configure(
+                    text=self.T("video_done",folder=self.output_dir), fg=self.C["SUCCESS"]),
+                self.video_progress_var.set(100),
+                self.btn_video_dl.configure(state="normal"),
+            ))
+            desktop_notify("Downloader", f"Video en {self.output_dir}")
+        except Exception as e:
+            self.after(0, lambda err=str(e)[:80]: (
+                self.lbl_video_status.configure(text=f"Error: {err}", fg=self.C["ERROR"]),
+                self.btn_video_dl.configure(state="normal"),
+            ))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB LETRAS
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_lyrics(self, parent):
+        C = self.C
+        p = tk.Frame(parent, bg=C["BG"], padx=18, pady=14)
+        p.pack(fill="both", expand=True)
+        p.columnconfigure(0, weight=1); p.rowconfigure(2, weight=1)
+
+        top = tk.Frame(p, bg=C["BG"]); top.grid(row=0, column=0, sticky="ew", pady=(0,4))
+        top.columnconfigure(0, weight=1)
+        self.lyrics_query_var = tk.StringVar()
+        tk.Entry(top, textvariable=self.lyrics_query_var, font=("Segoe UI",11),
+                  bg=C["PANEL"], fg=C["TEXT"], insertbackground=C["TEXT"],
+                  relief="flat", bd=8).grid(row=0, column=0, sticky="ew", ipady=5)
+        self.btn_lyrics_search = tk.Button(top, text=self.T("lyrics_btn"),
+                                            font=("Segoe UI",10,"bold"), bg=C["ACCENT"], fg=C["TEXT"],
+                                            relief="flat", cursor="hand2", padx=12, pady=5,
+                                            activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
+                                            command=self._search_lyrics)
+        self.btn_lyrics_search.grid(row=0, column=1, padx=(8,0))
+        tk.Label(p, text=self.T("lyrics_query"), font=("Segoe UI",8),
+                 bg=C["BG"], fg=C["SUBTEXT"]).grid(row=1, column=0, sticky="w", pady=(0,6))
+        self.lbl_lyrics_status = tk.Label(p, text="", font=("Segoe UI",8),
+                                           bg=C["BG"], fg=C["SUBTEXT"])
+        self.lbl_lyrics_status.grid(row=1, column=0, sticky="e")
+
+        lyr_outer = tk.Frame(p, bg=C["PANEL"])
+        lyr_outer.grid(row=2, column=0, sticky="nsew")
+        lyr_outer.rowconfigure(0, weight=1); lyr_outer.columnconfigure(0, weight=1)
+        self.lyrics_text = tk.Text(lyr_outer, font=("Segoe UI",10), bg=C["PANEL"], fg=C["TEXT"],
+                                    insertbackground=C["TEXT"], relief="flat", wrap="word",
+                                    state="disabled", bd=8)
+        lyr_sb = tk.Scrollbar(lyr_outer, command=self.lyrics_text.yview)
+        self.lyrics_text.configure(yscrollcommand=lyr_sb.set)
+        self.lyrics_text.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        lyr_sb.grid(row=0, column=1, sticky="ns")
+
+        save_f = tk.Frame(p, bg=C["BG"]); save_f.grid(row=3, column=0, sticky="ew", pady=(6,0))
+        self.btn_save_lrc = tk.Button(save_f, text=self.T("lyrics_save"),
+                                       font=("Segoe UI",9,"bold"), bg=C["ACCENT2"], fg=C["TEXT"],
+                                       relief="flat", cursor="hand2", padx=12, pady=5,
+                                       state="disabled", command=self._save_lrc)
+        self.btn_save_lrc.pack(side="left")
+        self.lbl_lrc_status = tk.Label(save_f, text="", font=("Segoe UI",8),
+                                        bg=C["BG"], fg=C["SUCCESS"])
+        self.lbl_lrc_status.pack(side="left", padx=8)
+        self._current_lrc = None
+
+    def _search_lyrics(self):
+        query = self.lyrics_query_var.get().strip()
+        if not query: return
+        if not HAS_LYRICS:
+            messagebox.showinfo("syncedlyrics","Instala syncedlyrics: pip install syncedlyrics"); return
+        self.lbl_lyrics_status.configure(text=self.T("lyrics_searching"), fg=self.C["SUBTEXT"])
+        self.btn_lyrics_search.configure(state="disabled")
+        threading.Thread(target=self._lyrics_worker, args=(query,), daemon=True).start()
+
+    def _lyrics_worker(self, query):
+        try:
+            lrc = syncedlyrics.search(query)
+            if lrc:
+                self._current_lrc = lrc
+                self.after(0, lambda: (
+                    self.lyrics_text.configure(state="normal"),
+                    self.lyrics_text.delete("1.0","end"),
+                    self.lyrics_text.insert("end", lrc),
+                    self.lyrics_text.configure(state="disabled"),
+                    self.lbl_lyrics_status.configure(text="Letras encontradas.", fg=self.C["SUCCESS"]),
+                    self.btn_save_lrc.configure(state="normal"),
+                ))
+            else:
+                self._current_lrc = None
+                self.after(0, lambda: (
+                    self.lyrics_text.configure(state="normal"),
+                    self.lyrics_text.delete("1.0","end"),
+                    self.lyrics_text.configure(state="disabled"),
+                    self.lbl_lyrics_status.configure(text=self.T("lyrics_not_found"), fg=self.C["WARNING"]),
+                    self.btn_save_lrc.configure(state="disabled"),
+                ))
+        except Exception as e:
+            self.after(0, lambda err=str(e)[:50]: self.lbl_lyrics_status.configure(
+                text=f"Error: {err}", fg=self.C["ERROR"]))
+        finally:
+            self.after(0, lambda: self.btn_lyrics_search.configure(state="normal"))
+
+    def _save_lrc(self):
+        if not self._current_lrc: return
+        query = self.lyrics_query_var.get().strip().replace(" ","_").replace("/","")[:40]
+        path  = filedialog.asksaveasfilename(defaultextension=".lrc",
+                    filetypes=[("LRC","*.lrc"),("Text","*.txt")],
+                    initialfile=f"{query}.lrc")
+        if not path: return
+        try:
+            with open(path,"w",encoding="utf-8") as f: f.write(self._current_lrc)
+            self.lbl_lrc_status.configure(
+                text=self.T("lyrics_saved",path=os.path.basename(path)), fg=self.C["SUCCESS"])
+        except Exception as e:
+            self.lbl_lrc_status.configure(text=f"Error: {e}", fg=self.C["ERROR"])
+
     # ════════════════════════════════════════════════════════════════════════
     # TAB BÚSQUEDA
     # ════════════════════════════════════════════════════════════════════════
@@ -1056,7 +1612,7 @@ class App(_Base):
                               if se.get()==self._search_ph else None)
         se.bind("<Return>", lambda e: self._do_search())
         se.grid(row=0, column=0, sticky="ew", ipady=5)
-        self.btn_do_search = tk.Button(sf, text="🔍 Buscar",
+        self.btn_do_search = tk.Button(sf, text="Buscar",
                                         font=("Segoe UI",10,"bold"), bg=C["ACCENT"], fg=C["TEXT"],
                                         relief="flat", cursor="hand2", padx=14, pady=5,
                                         activebackground=C["ACCENT2"], activeforeground=C["TEXT"],
@@ -1085,9 +1641,21 @@ class App(_Base):
                   bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
                   padx=14, pady=6, activebackground=C["ACCENT"], activeforeground=C["TEXT"],
                   command=self._add_search_result_to_queue).pack(side="left")
+        self.btn_preview = tk.Button(bf, text=self.T("preview_btn"), font=("Segoe UI",9),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=10, pady=6, command=self._preview_selected)
+        self.btn_preview.pack(side="left", padx=(6,0))
+        self.btn_preview_stop = tk.Button(bf, text=self.T("preview_stop"), font=("Segoe UI",9),
+                  bg=C["PANEL2"], fg=C["WARNING"], relief="flat", cursor="hand2",
+                  padx=10, pady=6, state="disabled", command=self._preview_stop)
+        self.btn_preview_stop.pack(side="left", padx=(4,0))
+        self.lbl_preview_status = tk.Label(bf, text="", font=("Segoe UI",8),
+                                            bg=C["BG"], fg=C["SUBTEXT"])
+        self.lbl_preview_status.pack(side="left", padx=8)
         tk.Label(bf, text="Doble click o selecciona y pulsa ＋", font=("Segoe UI",8),
-                 bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=10)
+                 bg=C["BG"], fg=C["SUBTEXT"]).pack(side="right")
         self.search_tree.bind("<Double-1>", lambda e: self._add_search_result_to_queue())
+        self._preview_tmpfile = None
 
     def _do_search(self):
         q = self.search_query_var.get().strip()
@@ -1630,6 +2198,25 @@ class App(_Base):
                         fpath = os.path.join(self.output_dir, fn.strip()+".mp3")
                         if os.path.exists(fpath):
                             self.after(100, lambda fp=fpath: self._embed_custom_cover(fp))
+                # Auto-organizar por artista/álbum
+                if self.auto_organize_var.get():
+                    for e in entries:
+                        artist = e.get("artist") or e.get("uploader","Desconocido")
+                        album  = e.get("album")  or e.get("playlist_title","")
+                        fn_base = template
+                        for var in ["title","uploader","artist"]:
+                            fn_base = fn_base.replace(f"%({var})s", e.get(var,"") or "")
+                        ext = FORMATS[fmt]["codec"].replace("vorbis","ogg")
+                        src = os.path.join(self.output_dir, fn_base.strip()+f".{ext}")
+                        if os.path.exists(src):
+                            dest_dir = os.path.join(self.output_dir,
+                                "".join(c for c in artist if c not in r'\/:*?"<>|')[:40],
+                                "".join(c for c in album  if c not in r'\/:*?"<>|')[:40] if album else "")
+                            os.makedirs(dest_dir, exist_ok=True)
+                            dest = os.path.join(dest_dir, os.path.basename(src))
+                            if not os.path.exists(dest):
+                                import shutil; shutil.move(src, dest)
+                                self._log(f"📂 Organizado: {artist}/{album or ''}")
                 self._log(f"✅ {url}")
                 return   # éxito — salir del loop de reintentos
 
@@ -1779,8 +2366,7 @@ class App(_Base):
         }); save_config(self.cfg)
         self.lbl_settings_status.configure(text=self.T("settings_saved"))
         self.after(3000, lambda: self.lbl_settings_status.configure(text=""))
-        # Recarga tema si cambió
-        self._reload_theme()
+        self.after(100, self._reload_theme)
 
     def _update_ytdlp(self):
         self.btn_update.configure(state="disabled")
@@ -1804,9 +2390,64 @@ class App(_Base):
 
 
 if __name__ == "__main__":
-    app = App()
-    app.geometry("840x820"); app.minsize(740,720)
+    import time
 
+    # ── App principal (oculta mientras carga) ─────────────────────────────
+    app = App()
+    app.withdraw()   # ocultar hasta que el splash termine
+
+    # ── Splash como Toplevel sobre la app ─────────────────────────────────
+    splash = tk.Toplevel(app)
+    splash.overrideredirect(True)
+    splash.attributes("-topmost", True)
+    splash.configure(bg="#111318")
+
+    W, H = 420, 240
+    sw = splash.winfo_screenwidth(); sh = splash.winfo_screenheight()
+    splash.geometry(f"{W}x{H}+{(sw-W)//2}+{(sh-H)//2}")
+
+    # Canvas del splash
+    sc = tk.Canvas(splash, width=W, height=H, bg="#111318", highlightthickness=0)
+    sc.pack(fill="both", expand=True)
+    sc.create_rectangle(1, 1, W-1, H-1, outline="#2a2d38", fill="#1c1f26", width=1)
+    sc.create_oval(178, 28, 242, 92, fill="#e94560", outline="")
+    sc.create_text(210, 60, text="♪", font=("Segoe UI", 26, "bold"), fill="white")
+    sc.create_text(210, 108, text="Audio Downloader",
+                   font=("Segoe UI", 15, "bold"), fill="#e8eaf0")
+    sc.create_text(210, 128, text="by Maken", font=("Segoe UI", 9), fill="#555a68")
+    sc.create_rectangle(40, 170, 380, 178, fill="#2a2d38", outline="")
+    bar = sc.create_rectangle(40, 170, 40, 178, fill="#e94560", outline="")
+    status_lbl = sc.create_text(210, 196, text="Iniciando…",
+                                 font=("Segoe UI", 9), fill="#8b909e")
+    sc.create_text(210, 220, text="v3.0", font=("Segoe UI", 8), fill="#3a3d4a")
+    splash.update()
+
+    def _set_progress(pct, msg=""):
+        x2 = 40 + int(340 * min(pct, 1.0))
+        sc.coords(bar, 40, 170, x2, 178)
+        if msg: sc.itemconfigure(status_lbl, text=msg)
+        splash.update()
+
+    # Animación de carga — pasos con tiempos reales
+    STEPS = [
+        (0.20, "Cargando configuración…"),
+        (0.45, "Iniciando yt-dlp…"),
+        (0.70, "Preparando interfaz…"),
+        (0.90, "Casi listo…"),
+    ]
+    for pct, msg in STEPS:
+        _set_progress(pct, msg)
+        time.sleep(0.12)
+
+    _set_progress(1.0, "¡Listo!")
+    time.sleep(0.15)
+
+    # Cerrar splash y mostrar app
+    splash.destroy()
+    app.geometry("960x720"); app.minsize(820,620)
+    app.deiconify()
+
+    # ── System tray al cerrar ─────────────────────────────────────────────
     def _on_close():
         if HAS_TRAY:
             app.withdraw()

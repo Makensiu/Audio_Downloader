@@ -1,10 +1,10 @@
 @echo off
 :: ─────────────────────────────────────────────────────────────────
-::  Audio Downloader — Build script v7
+::  Maken Audio Downloader — Build script v8
 :: ─────────────────────────────────────────────────────────────────
 
 echo [1/4] Instalando dependencias...
-pip install pyinstaller yt-dlp plyer pygame Pillow requests tkinterdnd2 mutagen matplotlib pystray
+pip install pyinstaller yt-dlp plyer pygame Pillow requests tkinterdnd2 mutagen matplotlib pystray syncedlyrics
 
 echo.
 echo [2/4] Comprobando ffmpeg.exe y ffprobe.exe...
@@ -40,16 +40,19 @@ pyinstaller ^
   --hidden-import "mutagen" ^
   --hidden-import "pystray" ^
   --hidden-import "matplotlib" ^
+  --hidden-import "syncedlyrics" ^
   --collect-all "yt_dlp" ^
   --collect-all "tkinterdnd2" ^
   --collect-all "matplotlib" ^
   --collect-all "pystray" ^
+  --collect-all "syncedlyrics" ^
   yt_mp3_downloader.py
 
 echo.
 echo [4/4] Listo!
 if exist "dist\AudioDownloader.exe" (
     echo  EXE generado en: dist\AudioDownloader.exe
+    echo  Comparte ese unico archivo con tus amigos.
 ) else (
     echo  ERROR: Revisa los mensajes de arriba.
 )
