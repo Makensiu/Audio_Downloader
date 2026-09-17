@@ -1,4 +1,4 @@
-# 🎵 Audio Downloader
+# 🎵 Maken Audio Downloader
 
 Descargador de audio y vídeo para YouTube, SoundCloud, Vimeo, Bandcamp y +1000 plataformas más.  
 Hecho por **Maken** · Uso personal entre amigos · No redistribuir sin permiso.
@@ -7,40 +7,40 @@ Hecho por **Maken** · Uso personal entre amigos · No redistribuir sin permiso.
 
 ## ✨ Características
 
+**Interfaz**
+- 🏠 Dashboard con estadísticas, últimas descargas y favoritos
+- 🖥️ Sidebar lateral estilo Material Design (oscuro/claro)
+- ✨ Splash screen de carga
+- 🗜️ Modo compacto (mini ventana con progreso mientras descarga en segundo plano)
+- 💡 Tooltips y atajos de teclado (Esc cancela, Ctrl+V pega URL)
+- 🌙 Minimiza a bandeja del sistema (configurable)
+
 **Descarga de audio**
 - ⬇️ Formatos: MP3, AAC, FLAC, WAV, OGG
 - 🎨 Portada incrustada automática o imagen personalizada
 - 📋 Cola multi-URL con soporte de playlists completas
+- 📋 Detección de URL en el portapapeles
 - 🔄 Detección de duplicados — no descarga lo que ya tienes
 - ⏰ Programación de descargas por hora (HH:MM)
 - ↩️ Reintentos automáticos en error de red
-- 📂 Perfiles de descarga (Música HQ / Podcast / Lossless / personalizados)
-- 📂 Auto-organizar por artista/álbum tras descargar
+- 📶 Verificación de conexión antes de descargar
+- 📂 Perfiles de descarga y auto-organizar por artista/álbum
+- ⚡ Fragmentos concurrentes por archivo + cache de metadatos (descargas más rápidas)
 
 **Descarga de vídeo**
-- 🎬 MP4 en 720p / 1080p / 1440p / 4K
-- 📝 Subtítulos opcionales en ES/EN
+- 🎬 MP4 en 720p / 1080p / 1440p / 4K con subtítulos opcionales
 
 **Búsqueda y reproducción**
-- 🔍 Buscador integrado — sin salir de la app
-- ▶️ Preview de 30s antes de descargar
-- ⭐ Favoritos — guarda URLs/canales para añadir a la cola en 1 click
+- 🔍 Buscador integrado con preview de 30s
+- ⭐ Favoritos con acceso rápido desde el Dashboard
 - ▶️ Reproductor de preescucha en historial
 
 **Gestión**
-- 📋 Historial con búsqueda, exportar CSV y exportar M3U
-- 🏷️ Editor de metadatos ID3 (título, artista, álbum, año, género)
-- 🔄 Convertidor local entre formatos (sin descargar nada)
-- 🎵 Letras sincronizadas (.lrc) con guardado de archivo
-- 📊 Gráficas: descargas por mes + pie chart de formatos
-
-**Interfaz**
-- 🖥️ Sidebar lateral estilo Material Design (oscuro/claro)
-- ✨ Splash screen de carga
-- 🌙 Minimiza a bandeja del sistema (system tray)
-- 🎨 Tema oscuro / claro + color de acento personalizable
-- 🌍 Interfaz en Español e Inglés
-- 🔔 Notificaciones de escritorio al terminar
+- 📋 Historial con búsqueda, selección múltiple, exportar CSV y M3U
+- 🏷️ Editor de metadatos ID3, individual y en lote (batch)
+- 🔄 Convertidor local entre formatos
+- 🎵 Letras sincronizadas (.lrc)
+- 📊 Gráficas de descargas por mes y formatos
 
 **Extra**
 - ⚙️ Proxy, velocidad máxima, cookies de navegador, descargas paralelas
@@ -72,8 +72,9 @@ FFmpeg (necesario para conversión):
 ## 📦 Compilar el .exe tú mismo
 
 1. Crea carpeta `ffmpeg\` junto al código con `ffmpeg.exe` y `ffprobe.exe`
-2. Ejecuta `build_exe.bat`
-3. Resultado en `dist\AudioDownloader.exe`
+2. Asegúrate de que `maken_icon.ico` esté en la misma carpeta
+3. Ejecuta `build_exe.bat`
+4. Resultado en `dist\AudioDownloader.exe`
 
 ---
 
@@ -83,6 +84,7 @@ FFmpeg (necesario para conversión):
 |---|---|
 | `yt_mp3_downloader.py` | Código fuente principal |
 | `build_exe.bat` | Script para compilar el .exe |
+| `maken_icon.ico` | Icono de la aplicación |
 | `INSTRUCCIONES_BUILD.txt` | Guía de compilación |
 
 ---

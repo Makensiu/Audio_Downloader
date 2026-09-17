@@ -1,6 +1,6 @@
 @echo off
 :: ─────────────────────────────────────────────────────────────────
-::  Maken Audio Downloader — Build script v8
+::  Maken Audio Downloader — Build script v9
 :: ─────────────────────────────────────────────────────────────────
 
 echo [1/4] Instalando dependencias...
@@ -25,14 +25,24 @@ if not exist "ffmpeg\ffprobe.exe" (
 )
 echo  OK
 
+set ICON_ARG=
+if exist "maken_icon.ico" (
+    set ICON_ARG=--icon "maken_icon.ico"
+    echo  Icono encontrado: maken_icon.ico
+) else (
+    echo  Aviso: no se encontro maken_icon.ico, se usara el icono por defecto
+)
+
 echo.
 echo [3/4] Compilando .exe...
 pyinstaller ^
   --onefile ^
   --windowed ^
   --name "AudioDownloader" ^
+  %ICON_ARG% ^
   --add-binary "ffmpeg\ffmpeg.exe;ffmpeg" ^
   --add-binary "ffmpeg\ffprobe.exe;ffmpeg" ^
+  --add-data "maken_icon.ico;." ^
   --hidden-import "plyer.platforms.win.notification" ^
   --hidden-import "tkinterdnd2" ^
   --hidden-import "pygame" ^

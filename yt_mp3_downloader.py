@@ -311,7 +311,9 @@ def load_config():
     d = {"lang":"es","output_dir":os.path.expanduser("~/Downloads"),
          "format":"MP3","quality":"320","template":"%(title)s",
          "proxy":"","throttle":"","cookies":"none","concurrent":1,"retries":3,
-         "theme":"dark","accent":"#e94560"}
+         "theme":"dark","accent":"#e94560",
+         "tray_on_close":True,"clean_thumbs":True,"notifications":True,
+         "fragment_concurrency":4}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE,"r",encoding="utf-8") as f: d.update(json.load(f))
@@ -335,8 +337,9 @@ def save_history(h):
         with open(HISTORY_FILE,"w",encoding="utf-8") as f: json.dump(h[-500:],f,ensure_ascii=False,indent=2)
     except Exception: pass
 
-def desktop_notify(title, msg):
+def desktop_notify(title, msg, cfg=None):
     if not HAS_NOTIF: return
+    if cfg and not cfg.get("notifications", True): return
     try: _notif.notify(title=title,message=msg,app_name="Audio Downloader",timeout=6)
     except Exception: pass
 
@@ -357,8 +360,62 @@ def open_folder(path):
 def open_url_browser(url):
     import webbrowser; webbrowser.open(url)
 
+def has_internet_connection(timeout=3):
+    """Comprueba conectividad real intentando conectar a un host fiable."""
+    import socket
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=timeout)
+        return True
+    except OSError:
+        try:
+            socket.create_connection(("1.1.1.1", 53), timeout=timeout)
+            return True
+        except OSError:
+            return False
+
 
 # ════════════════════════════════════════════════════════════════════════════
+# ─── Tooltip helper ──────────────────────────────────────────────────────────
+class _Tooltip:
+    """Tooltip flotante que aparece tras ~500ms de hover sobre un widget."""
+    def __init__(self, widget, text):
+        self.widget = widget; self.text = text
+        self._id = None; self._win = None
+        widget.bind("<Enter>",  self._on_enter, add="+")
+        widget.bind("<Leave>",  self._on_leave, add="+")
+        widget.bind("<Button>", self._on_leave, add="+")
+
+    def _on_enter(self, _=None):
+        self._id = self.widget.after(520, self._show)
+
+    def _on_leave(self, _=None):
+        if self._id:
+            try: self.widget.after_cancel(self._id)
+            except Exception: pass
+            self._id = None
+        if self._win:
+            try: self._win.destroy()
+            except Exception: pass
+            self._win = None
+
+    def _show(self):
+        if self._win: return
+        try:
+            x = self.widget.winfo_rootx() + 10
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+            self._win = tk.Toplevel(self.widget)
+            self._win.wm_overrideredirect(True)
+            self._win.wm_geometry(f"+{x}+{y}")
+            self._win.attributes("-topmost", True)
+            tk.Label(self._win, text=self.text, font=("Segoe UI",8),
+                     bg="#1c1f26", fg="#e8eaf0", padx=8, pady=4,
+                     relief="flat", bd=0).pack()
+        except Exception:
+            self._win = None
+
+def add_tooltip(widget, text):
+    _Tooltip(widget, text)
+
 _Base = TkinterDnD.Tk if HAS_DND else tk.Tk
 
 class App(_Base):
@@ -378,6 +435,8 @@ class App(_Base):
         self.profiles       = load_profiles()
         self._tray_icon     = None
         self._custom_cover  = None
+        self._info_cache    = {}    # {url: (timestamp, info_dict)} — cache de extract_info
+        self._INFO_CACHE_TTL = 300  # 5 minutos
         # Carga tema activo
         self.C = self._build_theme()
         self._apply_styles()
@@ -432,6 +491,8 @@ class App(_Base):
         C = self.C
         self.title(self.T("app_title"))
         self._active_section = "download"
+        self._is_compact     = False
+        self._normal_size    = "960x720"
 
         # ── Root layout: sidebar + main ──────────────────────────────────────
         root_frame = tk.Frame(self, bg=C["BG"])
@@ -464,6 +525,7 @@ class App(_Base):
         self._content_frames = {}
 
         SIDEBAR_ITEMS = [
+            ("dashboard", "🏠", "Dashboard"),
             ("download",  "⬇", self.T("tab_download").strip()),
             ("search",    "🔍", self.T("tab_search").strip()),
             ("history",   "📋", self.T("tab_history").strip()),
@@ -531,6 +593,10 @@ class App(_Base):
         self._btn_about = self._make_topbar_btn(
             topbar_right, self.T("btn_about"), self._show_about)
         self._btn_about.pack(side="right", padx=(4,0))
+        self._btn_compact = self._make_topbar_btn(
+            topbar_right, "⊡", self._toggle_compact)
+        self._btn_compact.pack(side="right", padx=(4,0))
+        self._btn_compact.configure(font=("Segoe UI",13), padx=7)
 
         # Content area (stack de frames)
         content_area = tk.Frame(main_frame, bg=C["BG"])
@@ -538,6 +604,7 @@ class App(_Base):
 
         # Crear todos los frames de contenido
         sections = [
+            ("dashboard", self._build_tab_dashboard),
             ("download",  self._build_tab_download),
             ("search",    self._build_tab_search),
             ("history",   self._build_tab_history),
@@ -556,7 +623,153 @@ class App(_Base):
             self._content_frames[key] = frame
 
         # Mostrar sección inicial
-        self._switch_section("download")
+        self._switch_section("dashboard")
+
+        # ── Atajos de teclado globales ──────────────────────────────────────
+        self.bind_all("<Escape>", self._shortcut_escape)
+        self.bind_all("<Control-v>", self._shortcut_ctrl_v)
+        self.bind_all("<Control-V>", self._shortcut_ctrl_v)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # MODO COMPACTO
+    # ════════════════════════════════════════════════════════════════════════
+    def _toggle_compact(self):
+        if self._is_compact:
+            self._exit_compact()
+        else:
+            self._enter_compact()
+
+    def _enter_compact(self):
+        C = self.C
+        self._is_compact = True
+        self._normal_size = self.geometry()   # guarda tamaño actual
+
+        # Ocultar todo excepto topbar
+        for w in self.winfo_children():
+            if hasattr(self, '_compact_overlay') and w == self._compact_overlay:
+                continue
+            try: w.pack_forget()
+            except Exception: pass
+
+        # Ventana mini
+        sw = self.winfo_screenwidth()
+        self.geometry(f"340x110+{sw-360}+40")
+        self.resizable(False, False)
+        self._btn_compact.configure(text="⊞")   # icono expandir
+
+        # Mini overlay
+        self._compact_overlay = tk.Frame(self, bg=C["PANEL"])
+        self._compact_overlay.pack(fill="both", expand=True)
+
+        # Fila 1: título + estado
+        row1 = tk.Frame(self._compact_overlay, bg=C["PANEL"])
+        row1.pack(fill="x", padx=12, pady=(10,4))
+        tk.Label(row1, text="♪ Maken", font=("Segoe UI",10,"bold"),
+                 bg=C["PANEL"], fg=C["TEXT"]).pack(side="left")
+        self._compact_status = tk.Label(row1, text="En espera…",
+                                         font=("Segoe UI",9), bg=C["PANEL"], fg=C["SUBTEXT"])
+        self._compact_status.pack(side="right")
+
+        # Barra de progreso mini
+        bar_bg = tk.Frame(self._compact_overlay, bg=C["BORDER"], height=5)
+        bar_bg.pack(fill="x", padx=12, pady=(0,6))
+        bar_bg.pack_propagate(False)
+        self._compact_bar = tk.Frame(bar_bg, bg=C["ACCENT"], height=5, width=0)
+        self._compact_bar.place(x=0, y=0, relheight=1)
+        bar_bg.bind("<Configure>", lambda e: self._compact_bar_update())
+        self._compact_bar_frame = bar_bg   # referencia para calcular ancho
+
+        # Fila 2: velocidad + ETA + botones
+        row2 = tk.Frame(self._compact_overlay, bg=C["PANEL"])
+        row2.pack(fill="x", padx=12)
+        self._compact_speed = tk.Label(row2, text="—", font=("Segoe UI",8),
+                                        bg=C["PANEL"], fg=C["MUTED"])
+        self._compact_speed.pack(side="left")
+
+        btn_f = tk.Frame(row2, bg=C["PANEL"]); btn_f.pack(side="right")
+        tk.Button(btn_f, text="Cancelar", font=("Segoe UI",8),
+                  bg=C["PANEL2"], fg=C["ERROR"], relief="flat", cursor="hand2",
+                  padx=8, pady=3, command=self._cancel_download).pack(side="left", padx=(0,4))
+        tk.Button(btn_f, text="⊞ Expandir", font=("Segoe UI",8),
+                  bg=C["ACCENT"], fg="white", relief="flat", cursor="hand2",
+                  padx=8, pady=3, command=self._exit_compact).pack(side="left")
+
+        # Sincronizar con el progreso actual si está descargando
+        self._compact_sync()
+
+    def _compact_bar_update(self):
+        """Recalcula el ancho de la barra mini según el progreso actual."""
+        try:
+            total_w = self._compact_bar_frame.winfo_width()
+            pct = self.progress_var.get() / 100
+            self._compact_bar.place(x=0, y=0, relheight=1, width=int(total_w * pct))
+        except Exception:
+            pass
+
+    def _compact_sync(self):
+        """Actualiza el overlay compacto con el estado actual cada 500ms."""
+        if not self._is_compact:
+            return
+        try:
+            pct  = self.progress_var.get()
+            stat = self.lbl_status.cget("text")
+            self._compact_status.configure(text=stat[:45] if stat else "En espera…")
+            self._compact_bar_update()
+            # Velocidad: extraer del status si contiene MB/s o kB/s
+            if "MB/s" in stat or "kB/s" in stat or "KB/s" in stat:
+                parts = stat.split()
+                speed_parts = [p for p in parts if "/s" in p]
+                eta_parts   = [p for p in parts if "ETA" in stat and ":" in p]
+                speed_str = speed_parts[0] if speed_parts else ""
+                eta_str   = eta_parts[0]   if eta_parts   else ""
+                self._compact_speed.configure(
+                    text=f"{speed_str}  ETA {eta_str}" if eta_str else speed_str)
+            self.after(400, self._compact_sync)
+        except Exception:
+            pass
+
+    def _exit_compact(self):
+        if not self._is_compact:
+            return
+        self._is_compact = False
+        self.resizable(True, True)
+        self._btn_compact.configure(text="⊡")
+
+        # Destruir overlay
+        if hasattr(self, '_compact_overlay'):
+            try: self._compact_overlay.destroy()
+            except Exception: pass
+            self._compact_overlay = None
+
+        # Restaurar tamaño y reconstruir UI
+        for w in self.winfo_children(): w.destroy()
+        self._sidebar_btns   = {}
+        self._content_frames = {}
+        self._build_ui()
+        self.geometry(self._normal_size)
+        self._refresh_history()
+        self._refresh_stats()
+        self._refresh_charts()
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ATAJOS DE TECLADO
+    # ════════════════════════════════════════════════════════════════════════
+    def _shortcut_escape(self, event=None):
+        """Esc cancela la descarga en curso si hay una activa."""
+        if self.is_downloading and self.btn_cancel.cget("state") == "normal":
+            self._cancel_download()
+
+    def _shortcut_ctrl_v(self, event=None):
+        """Ctrl+V pega la URL del portapapeles si estamos en la sección Descargar
+        y el foco no está ya en un campo de texto (para no interferir con pegar
+        texto normal en otros campos)."""
+        if self._active_section != "download":
+            return
+        focused = self.focus_get()
+        # Si el foco está en el propio cuadro de URL, dejar que Tkinter pegue normal
+        if focused is self.url_text:
+            return
+        self._paste_clipboard_url()
 
     def _make_sidebar_btn(self, parent, key, icon, label):
         C = self.C
@@ -608,6 +821,7 @@ class App(_Base):
     def _switch_section(self, key):
         C = self.C
         TOPBAR = {
+            "dashboard": ("🏠  Dashboard", "Bienvenido a Maken Audio Downloader"),
             "download":  ("⬇  " + self.T("tab_download").strip(),  "YouTube · SoundCloud · Vimeo · Bandcamp · +1000"),
             "search":    ("🔍  " + self.T("tab_search").strip(),    "Busca canciones sin salir de la app"),
             "history":   ("📋  " + self.T("tab_history").strip(),   "Tus descargas anteriores"),
@@ -642,6 +856,214 @@ class App(_Base):
         # Mostrar frame correcto
         for k, frame in self._content_frames.items():
             frame.lift() if k == key else frame.lower()
+        # Detectar URL en portapapeles al entrar en Descargar
+        if key == "download":
+            self.after(150, self._check_clipboard_for_url)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TAB DASHBOARD
+    # ════════════════════════════════════════════════════════════════════════
+    def _build_tab_dashboard(self, parent):
+        C = self.C
+        # Skeleton placeholder — se muestra instantáneamente mientras se
+        # construyen las cards reales (útil con historiales grandes)
+        skeleton = tk.Frame(parent, bg=C["BG"])
+        skeleton.pack(fill="both", expand=True)
+        self._draw_dashboard_skeleton(skeleton)
+        # Construir el contenido real en el siguiente ciclo del event loop
+        self.after(10, lambda: self._build_dashboard_content(parent, skeleton))
+
+    def _draw_dashboard_skeleton(self, parent):
+        C = self.C
+        ph_color = C["CARD"]
+        top = tk.Frame(parent, bg=C["BG"]); top.pack(fill="x", padx=20, pady=(18,8))
+        tk.Frame(top, bg=ph_color, width=220, height=22).pack(side="left")
+        # 4 stat card placeholders
+        row = tk.Frame(parent, bg=C["BG"]); row.pack(fill="x", padx=20, pady=(4,12))
+        for _ in range(4):
+            card = tk.Frame(row, bg=ph_color, width=140, height=80)
+            card.pack(side="left", padx=(0,10), fill="x", expand=True)
+            card.pack_propagate(False)
+        # 2 content card placeholders
+        bottom = tk.Frame(parent, bg=C["BG"]); bottom.pack(fill="both", expand=True, padx=20)
+        tk.Frame(bottom, bg=ph_color).pack(side="left", fill="both", expand=True, padx=(0,8))
+        tk.Frame(bottom, bg=ph_color).pack(side="left", fill="both", expand=True)
+
+    def _build_dashboard_content(self, parent, skeleton):
+        C = self.C
+        try: skeleton.destroy()
+        except Exception: pass
+        p = tk.Frame(parent, bg=C["BG"])
+        p.pack(fill="both", expand=True)
+        p.columnconfigure(0, weight=1); p.columnconfigure(1, weight=1)
+
+        # ── Fila 0: Bienvenida ───────────────────────────────────────────
+        welcome = tk.Frame(p, bg=C["BG"])
+        welcome.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(18,8))
+        tk.Label(welcome, text="Bienvenido de nuevo 👋",
+                 font=("Segoe UI",17,"bold"), bg=C["BG"], fg=C["TEXT"]).pack(side="left")
+        # Botón acceso rápido a descargar
+        tk.Button(welcome, text="⬇  Descargar ahora",
+                  font=("Segoe UI",10,"bold"), bg=C["ACCENT"], fg="white",
+                  relief="flat", cursor="hand2", padx=14, pady=7, bd=0,
+                  activebackground=C["ACCENT2"], activeforeground="white",
+                  command=lambda: self._switch_section("download")).pack(side="right")
+
+        # ── Fila 1: 4 stat cards ────────────────────────────────────────
+        stats_row = tk.Frame(p, bg=C["BG"])
+        stats_row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(0,12))
+        for i in range(4): stats_row.columnconfigure(i, weight=1)
+
+        h = self.history
+        from collections import Counter
+        top_fmt = Counter(r.get("formato","?") for r in h).most_common(1)[0][0] if h else "—"
+        top_ch  = Counter(r.get("canal","?")   for r in h).most_common(1)[0][0] if h else "—"
+
+        KBPS = {"MP3":192,"AAC":160,"FLAC":900,"WAV":1400,"OGG":160}
+        secs = sum(int(r.get("duracion","0:00").split(":")[0])*60 +
+                   int(r.get("duracion","0:00").split(":")[1])
+                   for r in h if ":" in r.get("duracion",""))
+        avg_kbps = sum(KBPS.get(r.get("formato","MP3"),192) for r in h)/len(h) if h else 192
+        mb = round(secs * avg_kbps / 8 / 1024, 1) if h else 0
+
+        cards_data = [
+            ("Total descargas", str(len(h)), "🎵"),
+            ("Formato favorito", top_fmt,    "🏆"),
+            ("Canal más escuchado", top_ch[:16] if h else "—", "📡"),
+            ("MB descargados", f"{mb} MB",  "💾"),
+        ]
+        for i,(label,value,icon) in enumerate(cards_data):
+            card = tk.Frame(stats_row, bg=C["CARD"], padx=16, pady=14)
+            card.grid(row=0, column=i, sticky="ew", padx=(0,10) if i<3 else 0)
+            tk.Label(card, text=icon, font=("Segoe UI",18),
+                     bg=C["CARD"], fg=C["ACCENT"]).pack(anchor="w")
+            tk.Label(card, text=value, font=("Segoe UI",14,"bold"),
+                     bg=C["CARD"], fg=C["TEXT"]).pack(anchor="w", pady=(2,0))
+            tk.Label(card, text=label, font=("Segoe UI",8),
+                     bg=C["CARD"], fg=C["SUBTEXT"]).pack(anchor="w")
+
+        # ── Fila 2 izq: Últimas descargas ───────────────────────────────
+        recent_card = tk.Frame(p, bg=C["CARD"])
+        recent_card.grid(row=2, column=0, sticky="nsew", padx=(20,8), pady=(0,16))
+        recent_card.columnconfigure(0, weight=1)
+
+        rc_hdr = tk.Frame(recent_card, bg=C["CARD"])
+        rc_hdr.pack(fill="x", padx=14, pady=(12,6))
+        tk.Label(rc_hdr, text="Últimas descargas",
+                 font=("Segoe UI",11,"bold"), bg=C["CARD"], fg=C["TEXT"]).pack(side="left")
+        tk.Button(rc_hdr, text="Ver todo →", font=("Segoe UI",8),
+                  bg=C["CARD"], fg=C["ACCENT"], relief="flat", cursor="hand2", bd=0,
+                  activebackground=C["CARD"], activeforeground=C["ACCENT2"],
+                  command=lambda: self._switch_section("history")).pack(side="right")
+
+        tk.Frame(recent_card, bg=C["BORDER"], height=1).pack(fill="x", padx=14)
+
+        recent = list(reversed(h))[:8]
+        if recent:
+            for r in recent:
+                row_f = tk.Frame(recent_card, bg=C["CARD"], cursor="hand2")
+                row_f.pack(fill="x", padx=14, pady=3)
+                # Icono formato
+                fmt_colors = {"MP3":"#e94560","AAC":"#f59e0b","FLAC":"#3b82f6",
+                               "WAV":"#10b981","OGG":"#8b5cf6"}
+                fc = fmt_colors.get(r.get("formato","MP3"), C["ACCENT"])
+                fmt_badge = tk.Frame(row_f, bg=fc, width=34, height=20)
+                fmt_badge.pack(side="left"); fmt_badge.pack_propagate(False)
+                tk.Label(fmt_badge, text=r.get("formato","MP3")[:3],
+                         font=("Segoe UI",7,"bold"), bg=fc, fg="white").place(
+                         relx=0.5, rely=0.5, anchor="center")
+                # Info
+                info = tk.Frame(row_f, bg=C["CARD"]); info.pack(side="left", padx=(8,0), fill="x", expand=True)
+                title = r.get("titulo","—")
+                tk.Label(info, text=(title[:42]+"…") if len(title)>42 else title,
+                         font=("Segoe UI",9), bg=C["CARD"], fg=C["TEXT"],
+                         anchor="w").pack(fill="x")
+                meta = f"{r.get('canal','—')} · {r.get('duracion','—')} · {r.get('fecha','—')}"
+                tk.Label(info, text=meta[:55], font=("Segoe UI",7),
+                         bg=C["CARD"], fg=C["SUBTEXT"], anchor="w").pack(fill="x")
+        else:
+            tk.Label(recent_card, text="Aún no hay descargas. Empieza descargando algo 🎶",
+                     font=("Segoe UI",10), bg=C["CARD"], fg=C["MUTED"],
+                     justify="center").pack(expand=True, pady=30)
+
+        # ── Fila 2 der: Favoritos + Búsqueda rápida ─────────────────────
+        right_col = tk.Frame(p, bg=C["BG"])
+        right_col.grid(row=2, column=1, sticky="nsew", padx=(0,20), pady=(0,16))
+        right_col.columnconfigure(0, weight=1)
+
+        # Búsqueda rápida
+        search_card = tk.Frame(right_col, bg=C["CARD"])
+        search_card.pack(fill="x", pady=(0,10))
+        tk.Label(search_card, text="Búsqueda rápida",
+                 font=("Segoe UI",11,"bold"), bg=C["CARD"], fg=C["TEXT"]).pack(
+                 anchor="w", padx=14, pady=(12,8))
+        sq_row = tk.Frame(search_card, bg=C["CARD"]); sq_row.pack(fill="x", padx=14, pady=(0,12))
+        sq_row.columnconfigure(0, weight=1)
+        self._dash_search_var = tk.StringVar()
+        sq_entry = tk.Entry(sq_row, textvariable=self._dash_search_var,
+                            font=("Segoe UI",10), bg=C["PANEL2"], fg=C["TEXT"],
+                            insertbackground=C["TEXT"], relief="flat", bd=6)
+        sq_entry.grid(row=0, column=0, sticky="ew", ipady=4)
+        sq_entry.bind("<Return>", self._dash_quick_search)
+        tk.Button(sq_row, text="→", font=("Segoe UI",10,"bold"),
+                  bg=C["ACCENT"], fg="white", relief="flat", cursor="hand2",
+                  padx=10, pady=4, bd=0,
+                  command=self._dash_quick_search).grid(row=0, column=1, padx=(6,0))
+
+        # Favoritos
+        favs_card = tk.Frame(right_col, bg=C["CARD"])
+        favs_card.pack(fill="both", expand=True)
+        fav_hdr = tk.Frame(favs_card, bg=C["CARD"])
+        fav_hdr.pack(fill="x", padx=14, pady=(12,6))
+        tk.Label(fav_hdr, text="Favoritos",
+                 font=("Segoe UI",11,"bold"), bg=C["CARD"], fg=C["TEXT"]).pack(side="left")
+        tk.Button(fav_hdr, text="Ver todo →", font=("Segoe UI",8),
+                  bg=C["CARD"], fg=C["ACCENT"], relief="flat", cursor="hand2", bd=0,
+                  activebackground=C["CARD"], activeforeground=C["ACCENT2"],
+                  command=lambda: self._switch_section("favorites")).pack(side="right")
+        tk.Frame(favs_card, bg=C["BORDER"], height=1).pack(fill="x", padx=14)
+
+        favs = self.favorites[:6]
+        if favs:
+            for fav in favs:
+                fav_row = tk.Frame(favs_card, bg=C["CARD"], cursor="hand2")
+                fav_row.pack(fill="x", padx=14, pady=4)
+                name = fav.get("name","")[:46]
+                tk.Label(fav_row, text="⭐", font=("Segoe UI",10),
+                         bg=C["CARD"], fg=C["WARNING"]).pack(side="left")
+                name_lbl = tk.Label(fav_row, text=name, font=("Segoe UI",9),
+                                     bg=C["CARD"], fg=C["TEXT"], anchor="w", cursor="hand2")
+                name_lbl.pack(side="left", padx=(6,0), fill="x", expand=True)
+                url = fav.get("url","")
+                add_btn = tk.Button(fav_row, text="＋", font=("Segoe UI",9,"bold"),
+                                     bg=C["CARD"], fg=C["ACCENT"], relief="flat",
+                                     cursor="hand2", bd=0,
+                                     command=lambda u=url: self._dash_add_fav_to_queue(u))
+                add_btn.pack(side="right")
+        else:
+            tk.Label(favs_card, text="No tienes favoritos aún.",
+                     font=("Segoe UI",9), bg=C["CARD"], fg=C["MUTED"]).pack(pady=16)
+
+        p.rowconfigure(2, weight=1)
+
+    def _dash_quick_search(self, _=None):
+        """Lleva al tab búsqueda con la query ya rellena."""
+        q = self._dash_search_var.get().strip()
+        if not q: return
+        self._switch_section("search")
+        self.after(50, lambda: (
+            self.search_query_var.set(q),
+            self._do_search()
+        ))
+
+    def _dash_add_fav_to_queue(self, url):
+        """Añade un favorito a la cola desde el dashboard."""
+        if url and url not in self.queue:
+            self.queue.append(url)
+            self.queue_list.insert("end", (url[:74]+"…") if len(url)>74 else url)
+            self._update_queue_count()
+            self._set_status(self.T("status_added", n=1), self.C["SUCCESS"])
+        self._switch_section("download")
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB DESCARGAR
@@ -683,6 +1105,11 @@ class App(_Base):
 
         # Botones URL
         br = tk.Frame(p, bg=C["BG"]); br.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(5,0))
+        self.btn_paste = tk.Button(br, text="📋 Pegar", font=("Segoe UI",9),
+                                    bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                                    padx=10, pady=3, command=self._paste_clipboard_url)
+        self.btn_paste.pack(side="left", padx=(0,6))
+        add_tooltip(self.btn_paste, "Pegar URL desde el portapapeles")
         self.btn_info = tk.Button(br, text=self.T("btn_info"), font=("Segoe UI",9,"bold"),
                                    bg=C["ACCENT2"], fg=C["TEXT"], relief="flat", cursor="hand2",
                                    padx=10, pady=3, activebackground=C["ACCENT"],
@@ -903,7 +1330,8 @@ class App(_Base):
 
         tf = tk.Frame(p, bg=C["PANEL"]); tf.grid(row=2, column=0, sticky="nsew")
         cols = ("titulo","canal","formato","duracion","fecha","carpeta")
-        self.hist_tree = ttk.Treeview(tf, columns=cols, show="headings", style="Hist.Treeview")
+        self.hist_tree = ttk.Treeview(tf, columns=cols, show="headings", style="Hist.Treeview",
+                                       selectmode="extended")
         for cid,w,lbl in [("titulo",248,self.T("col_title")),("canal",108,self.T("col_channel")),
                            ("formato",50,self.T("col_fmt")),  ("duracion",50,self.T("col_dur")),
                            ("fecha",86,self.T("col_date")),   ("carpeta",148,self.T("col_folder"))]:
@@ -934,6 +1362,12 @@ class App(_Base):
         self.lbl_now_playing = tk.Label(pb, text="", font=("Segoe UI",8),
                                          bg=C["PANEL2"], fg=C["SUCCESS"])
         self.lbl_now_playing.pack(side="right", padx=6)
+        self.btn_batch_meta = tk.Button(pb, text="🏷 Editar selección", font=("Segoe UI",9),
+                                         bg=C["PANEL2"], fg=C["TEXT"], relief="flat",
+                                         cursor="hand2", padx=10, pady=3,
+                                         command=self._open_batch_metadata)
+        self.btn_batch_meta.pack(side="left", padx=(10,0))
+        add_tooltip(self.btn_batch_meta, "Editar artista/álbum de varios MP3 seleccionados (Ctrl+click)")
 
         # Stats
         so = tk.Frame(p, bg=C["PANEL2"]); so.grid(row=4, column=0, sticky="ew", pady=(5,0))
@@ -985,15 +1419,29 @@ class App(_Base):
                       state="readonly", width=14, font=("Segoe UI",10)).grid(
                       row=2, column=1, sticky="w", pady=7)
 
-        # Paralelo
+        # Paralelo (nº de vídeos descargados a la vez)
         lbl(3,"concurrent_lbl")
-        conc_f = tk.Frame(p, bg=C["BG"]); conc_f.grid(row=3, column=1, sticky="w", pady=7)
+        conc_outer = tk.Frame(p, bg=C["BG"]); conc_outer.grid(row=3, column=1, sticky="w", pady=7)
+        conc_f = tk.Frame(conc_outer, bg=C["BG"]); conc_f.pack(anchor="w")
         self.concurrent_var = tk.IntVar(value=self.cfg.get("concurrent",1))
         for n in [1,2,3,4]:
             tk.Radiobutton(conc_f, text=str(n), variable=self.concurrent_var, value=n,
                            font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
                            selectcolor=C["ACCENT2"], activebackground=C["BG"],
                            activeforeground=C["TEXT"]).pack(side="left", padx=8)
+
+        # Fragmentos por archivo (velocidad de cada descarga individual)
+        frag_row = tk.Frame(conc_outer, bg=C["BG"]); frag_row.pack(anchor="w", pady=(6,0))
+        tk.Label(frag_row, text="Fragmentos por archivo:", font=("Segoe UI",9),
+                 bg=C["BG"], fg=C["SUBTEXT"]).pack(side="left", padx=(0,8))
+        self.fragment_var = tk.IntVar(value=self.cfg.get("fragment_concurrency",4))
+        for n in [1,2,4,8]:
+            tk.Radiobutton(frag_row, text=str(n), variable=self.fragment_var, value=n,
+                           font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                           selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                           activeforeground=C["TEXT"]).pack(side="left", padx=8)
+        tk.Label(conc_outer, text="Más fragmentos = descargas individuales más rápidas",
+                 font=("Segoe UI",7), bg=C["BG"], fg=C["MUTED"]).pack(anchor="w", pady=(2,0))
 
         # Reintentos
         lbl(4,"retries_lbl")
@@ -1032,8 +1480,36 @@ class App(_Base):
 
         sep(8)
 
+        # Opciones de comportamiento
+        tk.Label(p, text="Comportamiento:", font=("Segoe UI",10),
+                 bg=C["BG"], fg=C["TEXT"]).grid(row=9, column=0, sticky="nw", pady=7, padx=(0,16))
+        beh_f = tk.Frame(p, bg=C["BG"]); beh_f.grid(row=9, column=1, sticky="w", pady=7)
+
+        self.tray_on_close_var = tk.BooleanVar(value=self.cfg.get("tray_on_close", True))
+        tk.Checkbutton(beh_f, text="Minimizar a bandeja al cerrar (en lugar de salir)",
+                       variable=self.tray_on_close_var,
+                       font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                       selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                       activeforeground=C["TEXT"]).pack(anchor="w")
+
+        self.clean_thumbs_var = tk.BooleanVar(value=self.cfg.get("clean_thumbs", True))
+        tk.Checkbutton(beh_f, text="Limpiar miniaturas .webp sueltas tras descargar",
+                       variable=self.clean_thumbs_var,
+                       font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                       selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                       activeforeground=C["TEXT"]).pack(anchor="w", pady=(4,0))
+
+        self.notif_var = tk.BooleanVar(value=self.cfg.get("notifications", True))
+        tk.Checkbutton(beh_f, text="Notificaciones de escritorio al terminar",
+                       variable=self.notif_var,
+                       font=("Segoe UI",10), bg=C["BG"], fg=C["TEXT"],
+                       selectcolor=C["ACCENT2"], activebackground=C["BG"],
+                       activeforeground=C["TEXT"]).pack(anchor="w", pady=(4,0))
+
+        sep(10)
+
         # Guardar
-        save_f = tk.Frame(p, bg=C["BG"]); save_f.grid(row=9, column=0, columnspan=2, sticky="w")
+        save_f = tk.Frame(p, bg=C["BG"]); save_f.grid(row=11, column=0, columnspan=2, sticky="w")
         self.btn_save_cfg = tk.Button(save_f, text=self.T("btn_save_settings"),
                                        font=("Segoe UI",11,"bold"), bg=C["ACCENT2"], fg=C["TEXT"],
                                        relief="flat", cursor="hand2", padx=16, pady=8,
@@ -1043,10 +1519,10 @@ class App(_Base):
                                              bg=C["BG"], fg=C["SUCCESS"])
         self.lbl_settings_status.pack(side="left", padx=12)
 
-        sep(10)
+        sep(12)
 
         # Actualizar yt-dlp
-        upd_f = tk.Frame(p, bg=C["BG"]); upd_f.grid(row=11, column=0, columnspan=2, sticky="w")
+        upd_f = tk.Frame(p, bg=C["BG"]); upd_f.grid(row=13, column=0, columnspan=2, sticky="w")
         self.btn_update = tk.Button(upd_f, text=self.T("btn_update_ytdlp"),
                                      font=("Segoe UI",11,"bold"), bg=C["PANEL2"], fg=C["TEXT"],
                                      relief="flat", cursor="hand2", padx=16, pady=8,
@@ -1874,6 +2350,9 @@ class App(_Base):
         self._update_queue_count()
 
     def _clear_queue(self):
+        if len(self.queue) > 1:
+            if not messagebox.askyesno("Confirmar", f"¿Vaciar los {len(self.queue)} elementos de la cola?"):
+                return
         self.queue.clear(); self.queue_list.delete(0,"end"); self._update_queue_count()
 
     def _update_queue_count(self):
@@ -1937,6 +2416,36 @@ class App(_Base):
 
     def _clear_url(self): self.url_text.delete("1.0","end")
 
+    def _looks_like_url(self, text):
+        """Heurística simple: empieza por http(s):// y no tiene espacios."""
+        t = text.strip()
+        return t.startswith(("http://","https://")) and " " not in t and len(t) < 500
+
+    def _paste_clipboard_url(self):
+        try:
+            clip = self.clipboard_get()
+        except Exception:
+            clip = ""
+        if self._looks_like_url(clip):
+            cur = self.url_text.get("1.0","end").strip()
+            self.url_text.insert("end", ("\n" if cur else "") + clip.strip())
+            self._set_status("URL pegada desde el portapapeles.", self.C["SUCCESS"])
+        else:
+            self._set_status("El portapapeles no contiene una URL válida.", self.C["WARNING"])
+
+    def _check_clipboard_for_url(self):
+        """Si al entrar en Descargar hay una URL nueva en el portapapeles
+        que no está ya en el cuadro de texto, la ofrece con un aviso sutil."""
+        try:
+            clip = self.clipboard_get()
+        except Exception:
+            return
+        if self._looks_like_url(clip) and clip != getattr(self, "_last_clip_seen", None):
+            self._last_clip_seen = clip
+            current = self.url_text.get("1.0","end").strip()
+            if clip not in current:
+                self._set_status(f"📋 URL detectada en portapapeles — pulsa \"Pegar\"", self.C["ACCENT"])
+
     def _on_format_change(self, _=None):
         fmt = self.format_var.get()
         (self.qual_frame.pack_forget if fmt in ("FLAC","WAV") else lambda: self.qual_frame.pack(side="left"))()
@@ -1975,10 +2484,25 @@ class App(_Base):
         self._set_status(self.T("status_fetching"), self.C["SUBTEXT"])
         threading.Thread(target=self._fetch_info, args=(urls[0],), daemon=True).start()
 
+    def _get_cached_info(self, url, opts=None):
+        """Devuelve info de extract_info usando cache en memoria (TTL 5 min).
+        Evita pedir los mismos metadatos a YouTube más de una vez por URL
+        (Ver Info, chequeo de duplicados y descarga comparten resultado)."""
+        import time as _time
+        now = _time.time()
+        cached = self._info_cache.get(url)
+        if cached and (now - cached[0]) < self._INFO_CACHE_TTL:
+            return cached[1]
+        base_opts = {"quiet":True,"no_warnings":True,"skip_download":True}
+        if opts: base_opts.update(opts)
+        with yt_dlp.YoutubeDL(base_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        self._info_cache[url] = (now, info)
+        return info
+
     def _fetch_info(self, url):
         try:
-            with yt_dlp.YoutubeDL({"quiet":True,"no_warnings":True,"skip_download":True}) as ydl:
-                info = ydl.extract_info(url, download=False)
+            info = self._get_cached_info(url)
             thumb_url = None
             if info.get("_type") == "playlist":
                 entries = list(info.get("entries",[]))
@@ -2038,7 +2562,12 @@ class App(_Base):
             "outtmpl":os.path.join(self.output_dir, template+".%(ext)s"),
             "progress_hooks":[hook], "quiet":True, "no_warnings":True,
             "writethumbnail":(fmt=="MP3"), "postprocessors":pp,
-            "concurrent_fragment_downloads":self.cfg.get("concurrent",1),
+            # Fragmentos concurrentes POR ARCHIVO (distinto del nº de descargas
+            # simultáneas): acelera descargas de vídeos largos trayendo varios
+            # trozos a la vez en lugar de uno detrás de otro.
+            "concurrent_fragment_downloads": self.cfg.get("fragment_concurrency", 4),
+            # Chunk HTTP más grande = menos peticiones = menos overhead
+            "http_chunk_size": 10_485_760,   # 10 MB por chunk
         }
         if self.cfg.get("proxy","").strip():   opts["proxy"]       = self.cfg["proxy"].strip()
         if self.cfg.get("throttle","").strip(): opts["ratelimit"]   = self.cfg["throttle"].strip()
@@ -2051,6 +2580,28 @@ class App(_Base):
         if self.url_text.get("1.0","end").strip() and not self.queue: self._add_to_queue()
         if not self.queue:
             messagebox.showwarning(self.T("warn_empty_q_title"), self.T("warn_empty_queue")); return
+        # Verificación de conexión antes de lanzar la cola
+        self._set_status("Comprobando conexión…", self.C["SUBTEXT"])
+        self.btn_download.configure(state="disabled")
+        def _check_and_start():
+            online = has_internet_connection()
+            if not online:
+                self.after(0, lambda: (
+                    self.btn_download.configure(state="normal"),
+                    self._set_status("❌ Sin conexión a internet. Comprueba tu red e inténtalo de nuevo.",
+                                     self.C["ERROR"]),
+                    messagebox.showwarning("Sin conexión",
+                        "No se detecta conexión a internet.\nRevisa tu red e inténtalo de nuevo.")
+                ))
+            else:
+                self.after(0, lambda: (
+                    self.btn_download.configure(state="normal"),
+                    self._continue_start_queue()
+                ))
+        threading.Thread(target=_check_and_start, daemon=True).start()
+        return
+
+    def _continue_start_queue(self):
         # Comprobar programación de tiempo
         sched = self.schedule_var.get().strip()
         if sched:
@@ -2152,8 +2703,7 @@ class App(_Base):
 
         ext_chk = FORMATS[fmt]["codec"].replace("vorbis","ogg")
         try:
-            with yt_dlp.YoutubeDL({"quiet":True,"no_warnings":True,"skip_download":True}) as ydl:
-                pre = ydl.extract_info(url, download=False)
+            pre = self._get_cached_info(url)
             pre_entries = ([e for e in pre.get("entries",[]) if e]
                            if pre and pre.get("_type")=="playlist" else [pre] if pre else [])
             dupes = [e.get("title","?") for e in pre_entries
@@ -2224,11 +2774,17 @@ class App(_Base):
                 msg = str(e)
                 if "cancelled" in msg.lower(): return
                 if "ffmpeg" in msg.lower():
-                    self._log("⚠️  FFmpeg no encontrado — descargando sin conversión")
-                    opts_raw = {k:v for k,v in opts.items() if k not in ("postprocessors","writethumbnail")}
+                    self._log("⚠️  FFmpeg no encontrado — descargando audio sin conversión")
+                    # Quitar postprocessors Y writethumbnail para evitar .webp huérfanos
+                    opts_raw = {k:v for k,v in opts.items()
+                                if k not in ("postprocessors","writethumbnail")}
                     try:
                         with yt_dlp.YoutubeDL(opts_raw) as ydl: ydl.download([url])
-                        self._log("✅ Audio sin conversión"); self._completed+=1
+                        # Limpiar .webp sueltos si la opción está activa
+                        if self.cfg.get("clean_thumbs", True):
+                            self._cleanup_thumbnails(self.output_dir)
+                        self._log("✅ Audio descargado (instala FFmpeg para convertir a MP3)")
+                        self._completed += 1
                     except Exception as e2: self._log(f"ERROR fallback: {e2}")
                     return
                 # Error de red/otro → reintento si quedan intentos
@@ -2240,6 +2796,29 @@ class App(_Base):
             except Exception as e:
                 self._log(f"ERROR inesperado: {e}"); return
 
+    def _cleanup_thumbnails(self, folder):
+        """Elimina miniaturas sueltas (.webp, .jpg) que yt-dlp deja cuando
+        no puede incrustarlas por falta de FFmpeg."""
+        if not os.path.isdir(folder): return
+        removed = 0
+        for fn in os.listdir(folder):
+            # Solo borrar si la extensión es de imagen Y existe un audio con mismo nombre base
+            if fn.lower().endswith((".webp", ".jpg", ".jpeg", ".png")):
+                base = os.path.splitext(fn)[0]
+                # Comprobar si hay un archivo de audio con ese nombre base
+                has_audio = any(
+                    os.path.exists(os.path.join(folder, base + ext))
+                    for ext in (".mp3",".m4a",".webm",".ogg",".opus",".aac",".flac",".wav")
+                )
+                if has_audio:
+                    try:
+                        os.remove(os.path.join(folder, fn))
+                        removed += 1
+                    except Exception:
+                        pass
+        if removed:
+            self._log(f"🗑 {removed} miniatura(s) temporal(es) eliminada(s)")
+
     def _queue_finished(self):
         n=self._completed; fmt=self.format_var.get()
         self._clear_queue(); self.progress_var.set(0)
@@ -2248,8 +2827,8 @@ class App(_Base):
         self.btn_cancel.configure(state="disabled")
         if not self._cancel_evt.is_set():
             self._set_status(self.T("status_done",n=n,fmt=fmt,folder=self.output_dir), self.C["SUCCESS"])
-            desktop_notify(self.T("notif_title"), self.T("notif_msg",n=n,fmt=fmt))
-            self._export_m3u(auto=True)
+            desktop_notify(self.T("notif_title"), self.T("notif_msg",n=n,fmt=fmt), self.cfg)
+            # M3U solo se genera manualmente desde el botón en Historial
 
     # ════════════════════════════════════════════════════════════════════════
     # HISTORIAL
@@ -2287,6 +2866,80 @@ class App(_Base):
                     self._meta_load(fp)
                 break
 
+    def _open_batch_metadata(self):
+        """Diálogo para editar artista/álbum/género de varios MP3 a la vez."""
+        sel = self.hist_tree.selection()
+        if len(sel) < 1:
+            messagebox.showinfo("Editar en lote",
+                "Selecciona uno o más elementos del historial\n(Ctrl+click o Shift+click)."); return
+        if not HAS_MUTAGEN:
+            messagebox.showinfo("mutagen", "Instala mutagen: pip install mutagen"); return
+
+        # Recolectar filepaths válidos
+        titles = [self.hist_tree.item(s,"values")[0] for s in sel]
+        filepaths = []
+        for t in titles:
+            for r in reversed(self.history):
+                if r.get("titulo","") == t and r.get("filepath") and os.path.exists(r["filepath"]):
+                    filepaths.append(r["filepath"]); break
+        if not filepaths:
+            messagebox.showinfo("Editar en lote", "No se encontraron archivos válidos para los elementos seleccionados."); return
+
+        C = self.C
+        dlg = tk.Toplevel(self)
+        dlg.title(f"Editar {len(filepaths)} archivo(s)")
+        dlg.configure(bg=C["BG"])
+        dlg.geometry("380x300")
+        dlg.transient(self); dlg.grab_set()
+
+        tk.Label(dlg, text=f"Editando {len(filepaths)} archivo(s)",
+                 font=("Segoe UI",11,"bold"), bg=C["BG"], fg=C["TEXT"]).pack(pady=(16,4))
+        tk.Label(dlg, text="Deja en blanco los campos que no quieras cambiar.",
+                 font=("Segoe UI",8), bg=C["BG"], fg=C["SUBTEXT"]).pack(pady=(0,12))
+
+        form = tk.Frame(dlg, bg=C["BG"]); form.pack(fill="x", padx=24)
+        vars_ = {}
+        for label, tag in [("Artista","artist"),("Álbum","album"),
+                             ("Género","genre"),("Año","date")]:
+            row = tk.Frame(form, bg=C["BG"]); row.pack(fill="x", pady=4)
+            tk.Label(row, text=label, font=("Segoe UI",9), bg=C["BG"], fg=C["TEXT"],
+                     width=10, anchor="w").pack(side="left")
+            v = tk.StringVar()
+            tk.Entry(row, textvariable=v, font=("Segoe UI",9), bg=C["CARD"], fg=C["TEXT"],
+                      insertbackground=C["TEXT"], relief="flat", bd=5).pack(
+                      side="left", fill="x", expand=True, ipady=3)
+            vars_[tag] = v
+
+        status_lbl = tk.Label(dlg, text="", font=("Segoe UI",8), bg=C["BG"], fg=C["SUCCESS"])
+        status_lbl.pack(pady=(10,0))
+
+        def _apply():
+            from mutagen.easyid3 import EasyID3
+            from mutagen.id3 import ID3
+            changed = 0
+            for fp in filepaths:
+                try:
+                    try: audio = EasyID3(fp)
+                    except Exception:
+                        audio = mutagen.File(fp, easy=True); audio.add_tags()
+                    for tag, v in vars_.items():
+                        val = v.get().strip()
+                        if val: audio[tag] = val
+                    audio.save()
+                    changed += 1
+                except Exception:
+                    pass
+            status_lbl.configure(text=f"✅ {changed}/{len(filepaths)} archivo(s) actualizados.")
+            dlg.after(1200, dlg.destroy)
+
+        btn_row = tk.Frame(dlg, bg=C["BG"]); btn_row.pack(pady=16)
+        tk.Button(btn_row, text="Aplicar a todos", font=("Segoe UI",10,"bold"),
+                  bg=C["ACCENT"], fg="white", relief="flat", cursor="hand2",
+                  padx=16, pady=7, command=_apply).pack(side="left", padx=6)
+        tk.Button(btn_row, text="Cancelar", font=("Segoe UI",10),
+                  bg=C["PANEL2"], fg=C["TEXT"], relief="flat", cursor="hand2",
+                  padx=16, pady=7, command=dlg.destroy).pack(side="left")
+
     def _clear_history(self):
         if messagebox.askyesno(self.T("confirm_title"),self.T("confirm_clear")):
             self.history.clear(); save_history(self.history)
@@ -2314,6 +2967,17 @@ class App(_Base):
         self.stats_labels["stats_platform"].configure(text=(top_ch[:18] if h else "—"))
         self.stats_labels["stats_mb"].configure(text=f"{estimate_mb(h)} MB")
         self._refresh_charts()
+        self._refresh_dashboard()
+
+    def _refresh_dashboard(self):
+        """Reconstruye el dashboard si está visible."""
+        try:
+            if "dashboard" in self._content_frames:
+                frame = self._content_frames["dashboard"]
+                for w in frame.winfo_children(): w.destroy()
+                self._build_tab_dashboard(frame)
+        except Exception:
+            pass
 
     # ════════════════════════════════════════════════════════════════════════
     # REPRODUCTOR
@@ -2356,13 +3020,17 @@ class App(_Base):
 
     def _save_settings(self):
         self.cfg.update({
-            "proxy":      self.proxy_var.get().strip(),
-            "throttle":   self.throttle_var.get().strip(),
-            "cookies":    self.cookies_var.get(),
-            "concurrent": self.concurrent_var.get(),
-            "retries":    self.retries_var.get(),
-            "theme":      self.theme_var.get(),
-            "accent":     self.accent_var.get(),
+            "proxy":          self.proxy_var.get().strip(),
+            "throttle":       self.throttle_var.get().strip(),
+            "cookies":        self.cookies_var.get(),
+            "concurrent":     self.concurrent_var.get(),
+            "retries":        self.retries_var.get(),
+            "theme":          self.theme_var.get(),
+            "accent":         self.accent_var.get(),
+            "tray_on_close":  self.tray_on_close_var.get(),
+            "clean_thumbs":   self.clean_thumbs_var.get(),
+            "notifications":  self.notif_var.get(),
+            "fragment_concurrency": self.fragment_var.get(),
         }); save_config(self.cfg)
         self.lbl_settings_status.configure(text=self.T("settings_saved"))
         self.after(3000, lambda: self.lbl_settings_status.configure(text=""))
@@ -2449,7 +3117,7 @@ if __name__ == "__main__":
 
     # ── System tray al cerrar ─────────────────────────────────────────────
     def _on_close():
-        if HAS_TRAY:
+        if HAS_TRAY and app.cfg.get("tray_on_close", True):
             app.withdraw()
             if app._tray_icon is None:
                 try:
